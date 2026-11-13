@@ -186,5 +186,15 @@ export const EN = {
   "المعلم لديه حصة مع {0} في هذا الوقت": "The teacher has a period with {0} at this time",
   "الشعبة {0} لديها حصة {1} في هذا الوقت": "Section {0} has {1} at this time",
   "المعلم {0} لديه {1} حصة والأسبوع فيه {2} حصة فقط": "Teacher {0} has {1} periods but the week has only {2}",
-  "الشعبة {0} لديها {1} حصة والأسبوع فيه {2} حصة فقط": "Section {0} has {1} periods but the week has only {2}"
+  "الشعبة {0} لديها {1} حصة والأسبوع فيه {2} حصة فقط": "Section {0} has {1} periods but the week has only {2}",
+  "استيراد وتصدير البيانات": "Import & export data",
+  "استورد الصفوف والشعب والمواد والمعلمين والجدول دفعة واحدة من ملف بيانات (JSON)، أو صدّر نسخة احتياطية من بيانات مدرستك.": "Import grades, sections, subjects, teachers and the timetable in one go from a data file (JSON), or export a backup of your school's data.",
+  "ملف البيانات": "Data file", "حذف البيانات الحالية قبل الاستيراد": "Delete current data before importing",
+  "استيراد": "Import", "تصدير نسخة احتياطية": "Export backup", "اختر ملف البيانات أولًا": "Choose a data file first",
+  "الملف غير صالح": "Invalid file",
+  "سيتم استيراد {0} معلم و{1} شعبة و{2} مادة و{3} حصة في الجدول.": "This will import {0} teachers, {1} sections, {2} subjects and {3} timetable periods.",
+  "سيتم حذف البيانات الحالية أولًا.": "Current data will be deleted first.",
+  "جارٍ الاستيراد": "Importing", "حذف البيانات الحالية": "Deleting current data",
+  "استيراد الصفوف والمواد والمعلمين": "Importing grades, subjects and teachers", "استيراد الجدول": "Importing timetable", "تم": "Done",
+  "تم استيراد {0} معلم و{1} شعبة بنجاح ✅": "Imported {0} teachers and {1} sections successfully ✅"
 };

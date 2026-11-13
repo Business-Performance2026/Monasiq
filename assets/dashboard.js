@@ -200,6 +200,16 @@ function vSettings() {
       <div class="field"><label>المراحل الدراسية</label><input name="stages" value="${esc(s.stages)}"></div>
       <button class="btn primary">💾 حفظ بيانات المدرسة</button>
     </form>
+  </div>
+  <div class="card">
+    <h3>استيراد وتصدير البيانات</h3>
+    <p class="muted" style="margin-top:0">استورد الصفوف والشعب والمواد والمعلمين والجدول دفعة واحدة من ملف بيانات (JSON)، أو صدّر نسخة احتياطية من بيانات مدرستك.</p>
+    <div class="field"><label>ملف البيانات</label><input type="file" id="impFile" accept=".json,application/json"></div>
+    <label class="check" style="margin-bottom:1rem"><input type="checkbox" id="impReplace" checked> حذف البيانات الحالية قبل الاستيراد</label>
+    <div class="row-actions">
+      <button class="btn primary" id="impBtn"><span data-ic="upload" data-size="18"></span>استيراد</button>
+      <button class="btn" id="expBtn"><span data-ic="download" data-size="18"></span>تصدير نسخة احتياطية</button>
+    </div>
   </div>`;
 }
 BIND.settings = v => {
@@ -224,6 +234,20 @@ BIND.settings = v => {
       toast("تم حفظ إعدادات الدوام", "success");
     } catch (e) { toast(errMsg(e), "error"); }
   };
+  fillIcons(v);
+  $("impBtn").onclick = async () => {
+    const f = $("impFile").files[0];
+    if (!f) return toast("اختر ملف البيانات أولًا", "error");
+    let data;
+    try { data = JSON.parse(await f.text()); } catch { return toast("الملف غير صالح", "error"); }
+    if (data.format !== "monasiq-import") return toast("الملف غير صالح", "error");
+    const replace = $("impReplace").checked;
+    const msg = tf("سيتم استيراد {0} معلم و{1} شعبة و{2} مادة و{3} حصة في الجدول.", data.teachers?.length || 0, data.sections?.length || 0, data.subjects?.length || 0, data.timetable?.length || 0)
+      + (replace ? " " + tf("سيتم حذف البيانات الحالية أولًا.") : "");
+    if (!(await confirmBox(msg, tr("استيراد"), replace))) return;
+    await importData(data, replace);
+  };
+  $("expBtn").onclick = exportData;
   $("infoForm").onsubmit = async e => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target).entries());
@@ -233,6 +257,92 @@ BIND.settings = v => {
     catch (ex) { toast(errMsg(ex), "error"); }
   };
 };
+
+// ---------- الاستيراد والتصدير ----------
+async function importData(data, replace) {
+  openModal(`<div class="gen-box"><div class="spinner"></div><h3>${tr("جارٍ الاستيراد")}</h3><div class="progress"><i id="impBar"></i></div><p class="muted" id="impTxt"></p></div>`);
+  $("modalBack").dataset.lock = "1";
+  const step = (pct, txt) => { const b = $("impBar"); if (b) b.style.width = pct + "%"; const t = $("impTxt"); if (t) t.textContent = tr(txt); };
+  // كتابة على دفعات (حد Firestore 500 عملية لكل دفعة)
+  const ops = [];
+  const flush = async (label, from, to) => {
+    for (let i = 0; i < ops.length; i += 400) {
+      const b = writeBatch(db);
+      ops.slice(i, i + 400).forEach(fn => fn(b));
+      await b.commit();
+      step(from + (to - from) * Math.min(1, (i + 400) / ops.length), label);
+    }
+    ops.length = 0;
+  };
+  try {
+    if (replace) {
+      step(2, "حذف البيانات الحالية");
+      const old = [...S.grades.map(x => ["grades", x.id]), ...S.sections.map(x => ["sections", x.id]), ...S.subjects.map(x => ["subjects", x.id]), ...S.teachers.map(x => ["teachers", x.id])];
+      old.forEach(([c, id]) => ops.push(b => b.delete(dref(c, id))));
+      ops.push(b => b.delete(doc(db, "schools", SID, "timetable", "main")));
+      await flush("حذف البيانات الحالية", 2, 20);
+    }
+    if (data.settings?.days?.length && data.settings?.periods?.length) {
+      await updateDoc(doc(db, "schools", SID), { settings: { days: data.settings.days, periods: data.settings.periods }, updatedAt: serverTimestamp() });
+    }
+    // معرّفات جديدة لكل عنصر قبل الكتابة
+    const id = {};
+    const mk = (c, key) => { id[c + ":" + key] = doc(col(c)).id; };
+    (data.grades || []).forEach(x => mk("grades", x.key));
+    (data.sections || []).forEach(x => mk("sections", x.key));
+    (data.subjects || []).forEach(x => mk("subjects", x.key));
+    (data.teachers || []).forEach(x => mk("teachers", x.key));
+    const G = k => id["grades:" + k], C = k => id["sections:" + k], SB = k => id["subjects:" + k], T = k => id["teachers:" + k];
+    for (const g of data.grades || []) ops.push(b => b.set(doc(db, "schools", SID, "grades", G(g.key)), { name: g.name, code: String(g.code), createdAt: serverTimestamp() }));
+    for (const x of data.sections || []) ops.push(b => b.set(doc(db, "schools", SID, "sections", C(x.key)), { gradeId: G(x.grade), num: String(x.num) }));
+    for (const x of data.subjects || []) {
+      const periods = {}; for (const [gk, n] of Object.entries(x.periods || {})) if (G(gk)) periods[G(gk)] = num(n);
+      ops.push(b => b.set(doc(db, "schools", SID, "subjects", SB(x.key)), { name: x.name, color: x.color || "#0f766e", periods, createdAt: serverTimestamp() }));
+    }
+    for (const x of data.teachers || []) {
+      const assignments = (x.assignments || []).filter(a => SB(a.subject) && C(a.section)).map(a => ({ subjectId: SB(a.subject), sectionId: C(a.section), periods: num(a.periods) }));
+      ops.push(b => b.set(doc(db, "schools", SID, "teachers", T(x.key)), { name: x.name, phone: x.phone || "", subjectId: SB(x.subject) || "", maxLoad: num(x.maxLoad), assignments, createdAt: serverTimestamp() }));
+    }
+    await flush("استيراد الصفوف والمواد والمعلمين", 20, 85);
+    if (data.timetable?.length) {
+      step(90, "استيراد الجدول");
+      const lessons = data.timetable.filter(x => T(x.teacher) && SB(x.subject) && C(x.section))
+        .map(x => ({ t: T(x.teacher), s: SB(x.subject), c: C(x.section), d: x.d ?? null, p: x.p ?? null, l: !!x.l }));
+      TT.dirty = false; TT.saving = true;
+      await setDoc(doc(db, "schools", SID, "timetable", "main"), { lessons, updatedAt: serverTimestamp() });
+      TT.saving = false; TT.saved = lessons; TT.lessons = null;
+    }
+    step(100, "تم");
+    delete $("modalBack").dataset.lock;
+    closeModal();
+    toast(tf("تم استيراد {0} معلم و{1} شعبة بنجاح ✅", data.teachers?.length || 0, data.sections?.length || 0), "success");
+    location.hash = "#overview";
+  } catch (e) {
+    delete $("modalBack").dataset.lock;
+    closeModal();
+    toast(errMsg(e), "error");
+  }
+}
+function exportData() {
+  ttSync();
+  const gk = id => "g_" + id, sk = id => "c_" + id, bk = id => "s_" + id, tk = id => "t_" + id;
+  const data = {
+    format: "monasiq-import", version: 1, source: S.school.name, exportedAt: new Date().toISOString(),
+    settings: settings(),
+    grades: S.grades.map(g => ({ key: gk(g.id), name: g.name, code: g.code })),
+    sections: S.sections.map(x => ({ key: sk(x.id), grade: gk(x.gradeId), num: x.num })),
+    subjects: S.subjects.map(x => ({ key: bk(x.id), name: x.name, color: x.color, periods: Object.fromEntries(Object.entries(x.periods || {}).map(([g, n]) => [gk(g), n])) })),
+    teachers: S.teachers.map(t => ({ key: tk(t.id), name: t.name, phone: t.phone || "", subject: t.subjectId ? bk(t.subjectId) : "", maxLoad: num(t.maxLoad),
+      assignments: (t.assignments || []).map(a => ({ subject: bk(a.subjectId), section: sk(a.sectionId), periods: num(a.periods) })) })),
+    timetable: (TT.lessons || []).map(x => ({ teacher: tk(x.t), subject: bk(x.s), section: sk(x.c), d: x.d, p: x.p, l: !!x.l }))
+  };
+  const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `monasiq-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
 
 // =====================================================
 //  الصفوف والشعب
