@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل مدرسة | {app}</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-box">
+    <a href="index.html" class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></a>
+
+    <div class="card" id="formCard">
+      <h1>تسجيل مدرسة جديدة</h1>
+      <p class="sub">بعد إرسال الطلب ستراجعه إدارة المنصة وتفعّل حسابك.</p>
+      <form id="regForm" novalidate>
+        <div class="field"><label>اسم المدرسة *</label><input name="name" required placeholder="مثال: مدرسة أبو عبيدة (10-12)"></div>
+        <div class="grid-2">
+          <div class="field"><label>المحافظة / المنطقة *</label><input name="region" required placeholder="مثال: الداخلية"></div>
+          <div class="field"><label>الولاية / المدينة</label><input name="wilayah" placeholder="مثال: نزوى"></div>
+        </div>
+        <div class="field"><label>المراحل الدراسية</label><input name="stages" placeholder="مثال: من العاشر إلى الثاني عشر"></div>
+        <div class="grid-2">
+          <div class="field"><label>اسم المسؤول *</label><input name="principal" required placeholder="مدير المدرسة أو مسؤول الجدول"></div>
+          <div class="field"><label>رقم الهاتف *</label><input name="phone" required inputmode="tel" dir="ltr" placeholder="9xxxxxxx"></div>
+        </div>
+        <div class="field"><label>البريد الإلكتروني *</label><input name="email" type="email" required dir="ltr" autocomplete="email"></div>
+        <div class="grid-2">
+          <div class="field"><label>كلمة المرور *</label><input name="password" type="password" required minlength="6" dir="ltr" autocomplete="new-password"></div>
+          <div class="field"><label>تأكيد كلمة المرور *</label><input name="password2" type="password" required dir="ltr" autocomplete="new-password"></div>
+        </div>
+        <p class="error-text" id="err"></p>
+        <button class="btn primary block lg" id="submitBtn">إرسال طلب التسجيل</button>
+      </form>
+      <p class="auth-foot">لديك حساب؟ <a href="login.html">تسجيل الدخول</a></p>
+    </div>
+
+    <div class="card hidden" id="doneCard" style="text-align:center">
+      <div class="success-ic">✅</div>
+      <h1>تم استلام طلبك</h1>
+      <p class="muted">شكرًا لتسجيل <b id="doneName"></b>. طلبك الآن قيد المراجعة، وبعد تفعيله تستطيع الدخول بالبريد وكلمة المرور التي أدخلتها.</p>
+      <a href="index.html" class="btn primary">العودة للصفحة الرئيسية</a>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { auth, db, applyBranding, errMsg, configured, defaultPeriods } from "./assets/app.js";
+  import { createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  applyBranding();
+
+  const f = document.getElementById("regForm");
+  const err = document.getElementById("err");
+  const btn = document.getElementById("submitBtn");
+
+  f.addEventListener("submit", async e => {
+    e.preventDefault();
+    err.textContent = "";
+    const d = Object.fromEntries(new FormData(f).entries());
+    for (const k in d) d[k] = d[k].trim();
+    if (!d.name || !d.region || !d.principal || !d.phone || !d.email || !d.password) return (err.textContent = "يرجى تعبئة جميع الحقول المطلوبة (*)");
+    if (d.password.length < 6) return (err.textContent = "كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+    if (d.password !== d.password2) return (err.textContent = "كلمتا المرور غير متطابقتين");
+    if (!configured) return (err.textContent = "المنصة غير مربوطة بـ Firebase بعد");
+
+    btn.disabled = true; btn.textContent = "جارٍ الإرسال...";
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, d.email, d.password);
+      await setDoc(doc(db, "schools", cred.user.uid), {
+        name: d.name, region: d.region, wilayah: d.wilayah, stages: d.stages,
+        principal: d.principal, phone: d.phone, email: d.email,
+        ownerUid: cred.user.uid, status: "pending",
+        settings: { days: ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"], periods: defaultPeriods(8) },
+        createdAt: serverTimestamp()
+      });
+      await signOut(auth);
+      document.getElementById("doneName").textContent = d.name;
+      document.getElementById("formCard").classList.add("hidden");
+      document.getElementById("doneCard").classList.remove("hidden");
+    } catch (ex) {
+      err.textContent = errMsg(ex);
+      btn.disabled = false; btn.textContent = "إرسال طلب التسجيل";
+    }
+  });
+</script>
+</body>
+</html>

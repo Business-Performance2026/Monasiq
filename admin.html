@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>إدارة المنصة | {app}</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div id="loading" class="loading"><div><div class="spinner"></div>جارٍ التحميل...</div></div>
+
+<div class="app hidden" id="appRoot">
+  <aside class="side" id="side">
+    <div class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></div>
+    <div class="school-name">لوحة إدارة المنصة</div>
+    <nav>
+      <a href="#" class="active">🏫 المدارس</a>
+      <a href="index.html" target="_blank">🌐 الصفحة الرئيسية</a>
+    </nav>
+    <button class="btn logout" id="logoutBtn">تسجيل الخروج</button>
+  </aside>
+  <div class="side-shade" id="shade"></div>
+
+  <div>
+    <div class="topbar">
+      <div class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></div>
+      <button class="menu-btn" id="menuBtn">☰</button>
+    </div>
+    <main class="main">
+      <div class="page-title"><h1>إدارة المدارس</h1></div>
+
+      <div class="stats">
+        <div class="stat"><div class="n" id="sTotal">0</div><div class="l">إجمالي المدارس</div></div>
+        <div class="stat"><div class="n" id="sPending" style="color:var(--warn)">0</div><div class="l">بانتظار الموافقة</div></div>
+        <div class="stat"><div class="n" id="sActive" style="color:var(--ok)">0</div><div class="l">مدارس مفعّلة</div></div>
+        <div class="stat"><div class="n" id="sStopped" style="color:var(--bad)">0</div><div class="l">موقوفة / مرفوضة</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="tabs" id="filters">
+            <button data-f="pending" class="active">بانتظار الموافقة</button>
+            <button data-f="active">المفعّلة</button>
+            <button data-f="suspended">الموقوفة</button>
+            <button data-f="rejected">المرفوضة</button>
+            <button data-f="all">الكل</button>
+          </div>
+          <input id="search" placeholder="بحث باسم المدرسة أو البريد..." style="max-width:280px">
+        </div>
+        <div id="list"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script type="module">
+  import { auth, db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg } from "./assets/app.js";
+  import { collection, onSnapshot, doc, updateDoc, deleteDoc, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  applyBranding();
+
+  const user = await waitUser();
+  const role = await getRole(user).catch(() => ({ role: "none" }));
+  if (role.role !== "admin") location.replace("login.html");
+  else start();
+
+  function start() {
+    document.getElementById("loading").classList.add("hidden");
+    document.getElementById("appRoot").classList.remove("hidden");
+    document.getElementById("logoutBtn").onclick = logout;
+    const side = document.getElementById("side"), shade = document.getElementById("shade");
+    document.getElementById("menuBtn").onclick = () => { side.classList.add("open"); shade.classList.add("show"); };
+    shade.onclick = () => { side.classList.remove("open"); shade.classList.remove("show"); };
+
+    let schools = [], filter = "pending", q = "";
+    onSnapshot(collection(db, "schools"), snap => {
+      schools = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      render();
+    }, e => toast(errMsg(e), "error"));
+
+    document.getElementById("filters").onclick = e => {
+      const b = e.target.closest("button"); if (!b) return;
+      filter = b.dataset.f;
+      document.querySelectorAll("#filters button").forEach(x => x.classList.toggle("active", x === b));
+      render();
+    };
+    document.getElementById("search").oninput = e => { q = e.target.value.trim(); render(); };
+
+    function render() {
+      const c = s => schools.filter(x => x.status === s).length;
+      const $ = id => document.getElementById(id);
+      $("sTotal").textContent = schools.length;
+      $("sPending").textContent = c("pending");
+      $("sActive").textContent = c("active");
+      $("sStopped").textContent = c("suspended") + c("rejected");
+
+      let rows = filter === "all" ? schools : schools.filter(s => s.status === filter);
+      if (q) rows = rows.filter(s => (s.name + " " + s.email + " " + (s.region || "")).includes(q));
+      const list = document.getElementById("list");
+      if (!rows.length) { list.innerHTML = `<div class="empty"><div class="big">📭</div>لا توجد مدارس في هذا القسم</div>`; return; }
+
+      list.innerHTML = rows.map(s => {
+        const st = STATUS[s.status] || { label: s.status, cls: "info" };
+        const date = s.createdAt?.toDate ? s.createdAt.toDate().toLocaleDateString("ar-OM") : "";
+        const acts = [];
+        if (s.status === "pending") acts.push(`<button class="btn sm success" data-a="active">✔ موافقة</button><button class="btn sm warn" data-a="rejected">رفض</button>`);
+        if (s.status === "active") acts.push(`<button class="btn sm warn" data-a="suspended">إيقاف</button>`);
+        if (s.status === "suspended" || s.status === "rejected") acts.push(`<button class="btn sm success" data-a="active">تفعيل</button>`);
+        acts.push(`<button class="btn sm danger" data-a="delete">حذف</button>`);
+        return `<div class="card school-card" data-id="${s.id}">
+          <div>
+            <h3 style="margin:0 0 .3rem">${esc(s.name)} <span class="badge ${st.cls}">${st.label}</span></h3>
+            <div class="meta">
+              <span>📍 ${esc(s.region || "")}${s.wilayah ? " - " + esc(s.wilayah) : ""}</span>
+              ${s.stages ? `<span>🎓 ${esc(s.stages)}</span>` : ""}
+              <span>👤 ${esc(s.principal || "")}</span>
+              <span>📞 <a href="tel:${esc(s.phone)}" dir="ltr">${esc(s.phone || "")}</a></span>
+              <span>✉️ <a href="mailto:${esc(s.email)}">${esc(s.email || "")}</a></span>
+              ${date ? `<span>🗓️ ${date}</span>` : ""}
+            </div>
+          </div>
+          <div class="row-actions">${acts.join("")}</div>
+        </div>`;
+      }).join("");
+    }
+
+    document.getElementById("list").onclick = async e => {
+      const b = e.target.closest("button[data-a]"); if (!b) return;
+      const id = b.closest("[data-id]").dataset.id;
+      const s = schools.find(x => x.id === id);
+      const a = b.dataset.a;
+      try {
+        if (a === "delete") {
+          if (!(await confirmBox(`حذف مدرسة «${s.name}» وكل بياناتها نهائيًا؟`, "حذف نهائي"))) return;
+          for (const sub of ["grades", "sections", "subjects", "teachers", "timetable"]) {
+            const docs = (await getDocs(collection(db, "schools", id, sub))).docs;
+            for (let i = 0; i < docs.length; i += 400) {
+              const batch = writeBatch(db);
+              docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+              await batch.commit();
+            }
+          }
+          await deleteDoc(doc(db, "schools", id));
+          toast("تم حذف المدرسة", "success");
+          return;
+        }
+        const labels = { active: "تفعيل", suspended: "إيقاف", rejected: "رفض" };
+        if (a !== "active" && !(await confirmBox(`${labels[a]} مدرسة «${s.name}»؟`, labels[a]))) return;
+        await updateDoc(doc(db, "schools", id), { status: a, statusAt: serverTimestamp() });
+        toast(a === "active" ? "تم تفعيل المدرسة ✅" : "تم التحديث", "success");
+      } catch (ex) { toast(errMsg(ex), "error"); }
+    };
+  }
+</script>
+</body>
+</html>

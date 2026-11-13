@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة المدرسة | {app}</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div id="loading" class="loading"><div><div class="spinner"></div>جارٍ تحميل بيانات المدرسة...</div></div>
+
+<div class="app hidden" id="appRoot">
+  <aside class="side" id="side">
+    <div class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></div>
+    <div class="school-name" id="schoolName"></div>
+    <nav id="nav">
+      <a href="#overview" data-v="overview">📊 الرئيسية</a>
+      <a href="#settings" data-v="settings">⚙️ إعدادات الدوام</a>
+      <a href="#grades" data-v="grades">🏷️ الصفوف والشعب</a>
+      <a href="#subjects" data-v="subjects">📚 المواد</a>
+      <a href="#teachers" data-v="teachers">👩‍🏫 المعلمون</a>
+      <a href="#timetable" data-v="timetable">🗓️ توزيع الجدول <span class="soon">قريبًا</span></a>
+    </nav>
+    <button class="btn logout" id="logoutBtn">تسجيل الخروج</button>
+  </aside>
+  <div class="side-shade" id="shade"></div>
+
+  <div>
+    <div class="topbar">
+      <div class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></div>
+      <button class="menu-btn" id="menuBtn">☰</button>
+    </div>
+    <main class="main" id="view"></main>
+  </div>
+</div>
+
+<div class="modal-back" id="modalBack"><div class="modal" id="modal"></div></div>
+
+<script type="module" src="assets/dashboard.js"></script>
+</body>
+</html>

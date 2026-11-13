@@ -1,0 +1,45 @@
+rules_version = '2';
+// قواعد حماية قاعدة البيانات — انسخها إلى: Firestore Database > Rules > Publish
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function isActiveSchool(schoolId) {
+      return signedIn() && request.auth.uid == schoolId &&
+        get(/databases/$(database)/documents/schools/$(schoolId)).data.status == 'active';
+    }
+
+    // مدير المنصة: يُضاف يدويًا من لوحة Firebase فقط
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // المدارس — رقم المدرسة = رقم حساب المسؤول (uid)
+    match /schools/{schoolId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == schoolId);
+
+      // التسجيل: المدرسة تنشئ ملفها بحالة "بانتظار الموافقة" فقط
+      allow create: if signedIn() && request.auth.uid == schoolId
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      // المدرسة المفعّلة تعدّل بياناتها فقط (لا تستطيع تغيير حالتها)
+      allow update: if isAdmin() || (
+        isActiveSchool(schoolId) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'region', 'wilayah', 'stages', 'principal', 'phone', 'settings', 'updatedAt'])
+      );
+
+      allow delete: if isAdmin();
+
+      // كل بيانات المدرسة (معلمين، صفوف، شعب، مواد، جدول)
+      match /{sub=**} {
+        allow read, write: if isAdmin() || isActiveSchool(schoolId);
+      }
+    }
+  }
+}

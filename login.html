@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل الدخول | {app}</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-box narrow">
+    <a href="index.html" class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></a>
+    <div class="card">
+      <h1>تسجيل الدخول</h1>
+      <p class="sub">ادخل بحساب مدرستك</p>
+      <div id="notice"></div>
+      <form id="loginForm" novalidate>
+        <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" dir="ltr" autocomplete="email" required></div>
+        <div class="field"><label>كلمة المرور</label><input name="password" type="password" dir="ltr" autocomplete="current-password" required></div>
+        <p class="error-text" id="err"></p>
+        <button class="btn primary block lg" id="btn">دخول</button>
+      </form>
+      <p class="auth-foot"><a href="#" id="forgot">نسيت كلمة المرور؟</a></p>
+      <p class="auth-foot">مدرستك غير مسجلة؟ <a href="register.html">سجّل الآن</a></p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { auth, applyBranding, errMsg, getRole, configured, esc } from "./assets/app.js";
+  import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  applyBranding();
+
+  const f = document.getElementById("loginForm");
+  const err = document.getElementById("err");
+  const btn = document.getElementById("btn");
+  const notice = document.getElementById("notice");
+
+  const MSG = {
+    pending: ["warn", "طلب تسجيل مدرستك قيد المراجعة. ستتمكن من الدخول بعد تفعيل الحساب من إدارة المنصة."],
+    suspended: ["bad", "حساب المدرسة موقوف حاليًا. تواصل مع إدارة المنصة."],
+    rejected: ["bad", "تم رفض طلب تسجيل المدرسة. تواصل مع إدارة المنصة للمزيد من التفاصيل."],
+    none: ["bad", "هذا الحساب غير مرتبط بأي مدرسة."]
+  };
+  function show(key) {
+    const [cls, txt] = MSG[key] || MSG.none;
+    notice.innerHTML = `<div class="notice ${cls}">${esc(txt)}</div>`;
+  }
+  const qs = new URLSearchParams(location.search).get("s");
+  if (qs) show(qs);
+
+  async function route(user) {
+    const r = await getRole(user);
+    if (r.role === "admin") return location.replace("admin.html");
+    if (r.role === "school" && r.status === "active") return location.replace("dashboard.html");
+    await signOut(auth);
+    show(r.role === "school" ? r.status : "none");
+    btn.disabled = false; btn.textContent = "دخول";
+  }
+
+  f.addEventListener("submit", async e => {
+    e.preventDefault();
+    err.textContent = ""; notice.innerHTML = "";
+    const email = f.email.value.trim(), pass = f.password.value;
+    if (!email || !pass) return (err.textContent = "أدخل البريد وكلمة المرور");
+    if (!configured) return (err.textContent = "المنصة غير مربوطة بـ Firebase بعد");
+    btn.disabled = true; btn.textContent = "جارٍ الدخول...";
+    try {
+      const c = await signInWithEmailAndPassword(auth, email, pass);
+      await route(c.user);
+    } catch (ex) {
+      err.textContent = errMsg(ex);
+      btn.disabled = false; btn.textContent = "دخول";
+    }
+  });
+
+  document.getElementById("forgot").addEventListener("click", async e => {
+    e.preventDefault();
+    const email = f.email.value.trim();
+    if (!email) return (err.textContent = "اكتب بريدك الإلكتروني أولًا ثم اضغط «نسيت كلمة المرور»");
+    try {
+      await sendPasswordResetEmail(auth, email);
+      notice.innerHTML = `<div class="notice ok">أرسلنا رابط إعادة تعيين كلمة المرور إلى ${esc(email)}</div>`;
+      err.textContent = "";
+    } catch (ex) { err.textContent = errMsg(ex); }
+  });
+</script>
+</body>
+</html>
