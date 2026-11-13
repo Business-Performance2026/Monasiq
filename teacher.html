@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>جدولي | {app}</title>
+  <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="teacher-page">
+<div id="loading" class="loading"><div><div class="spinner"></div>جارٍ التحميل...</div></div>
+
+<div class="hidden" id="appRoot">
+  <header class="tp-top">
+    <div class="tb-title">
+      <span class="logo-mark sm"><i></i><i></i><i></i><i></i></span>
+      <div><b data-app-name></b><small id="schoolName" data-no-i18n></small></div>
+    </div>
+    <div class="tb-actions">
+      <button class="lang-btn" data-lang-toggle></button>
+      <button class="icon-btn" id="logoutBtn" title="تسجيل الخروج"><span data-ic="logout"></span></button>
+    </div>
+  </header>
+  <main class="tp-main" id="view"></main>
+</div>
+
+<script type="module" src="assets/teacher.js"></script>
+</body>
+</html>

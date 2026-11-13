@@ -7,9 +7,19 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
+    function schoolDoc(schoolId) {
+      return get(/databases/$(database)/documents/schools/$(schoolId)).data;
+    }
     function isActiveSchool(schoolId) {
-      return signedIn() && request.auth.uid == schoolId &&
-        get(/databases/$(database)/documents/schools/$(schoolId)).data.status == 'active';
+      return signedIn() && request.auth.uid == schoolId && schoolDoc(schoolId).status == 'active';
+    }
+    // معلم مفعّل تابع لهذه المدرسة (والمدرسة نفسها مفعّلة)
+    function isActiveTeacherOf(schoolId) {
+      let path = /databases/$(database)/documents/teacherAccounts/$(request.auth.uid);
+      return signedIn() && exists(path)
+        && get(path).data.schoolId == schoolId
+        && get(path).data.status == 'active'
+        && schoolDoc(schoolId).status == 'active';
     }
 
     // مدير المنصة: يُضاف يدويًا من لوحة Firebase فقط
@@ -18,16 +28,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // قائمة المدارس المفعّلة (الاسم والمنطقة فقط) — تظهر للمعلم عند التسجيل
+    match /publicSchools/{schoolId} {
+      allow read: if true;
+      allow create, update: if isAdmin() || isActiveSchool(schoolId);
+      allow delete: if isAdmin();
+    }
+
     // المدارس — رقم المدرسة = رقم حساب المسؤول (uid)
     match /schools/{schoolId} {
-      allow read: if isAdmin() || (signedIn() && request.auth.uid == schoolId);
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == schoolId) || isActiveTeacherOf(schoolId);
 
-      // التسجيل: المدرسة تنشئ ملفها بحالة "بانتظار الموافقة" فقط
       allow create: if signedIn() && request.auth.uid == schoolId
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.status == 'pending';
 
-      // المدرسة المفعّلة تعدّل بياناتها فقط (لا تستطيع تغيير حالتها)
       allow update: if isAdmin() || (
         isActiveSchool(schoolId) &&
         request.resource.data.diff(resource.data).affectedKeys()
@@ -36,10 +51,39 @@ service cloud.firestore {
 
       allow delete: if isAdmin();
 
-      // كل بيانات المدرسة (معلمين، صفوف، شعب، مواد، جدول)
+      // بيانات المدرسة: المدرسة تقرأ وتكتب، والمعلم المفعّل يقرأ فقط
       match /{sub=**} {
-        allow read, write: if isAdmin() || isActiveSchool(schoolId);
+        allow read: if isAdmin() || isActiveSchool(schoolId) || isActiveTeacherOf(schoolId);
+        allow write: if isAdmin() || isActiveSchool(schoolId);
       }
+    }
+
+    // حسابات المعلمين — رقم الوثيقة = رقم حساب المعلم (uid)
+    match /teacherAccounts/{uid} {
+      // المعلم يرى حسابه، والمدرسة ترى حسابات معلميها، والمدير يرى الكل
+      allow read: if isAdmin()
+        || (signedIn() && request.auth.uid == uid)
+        || (signedIn() && resource.data.schoolId == request.auth.uid);
+
+      // طلب انضمام: المعلم ينشئ حسابه بحالة "بانتظار الموافقة" لمدرسة مفعّلة
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.status == 'pending'
+        && exists(/databases/$(database)/documents/publicSchools/$(request.resource.data.schoolId))
+        && !request.resource.data.keys().hasAny(['teacherId']);
+
+      // المدرسة: موافقة / إيقاف / تعديل / ربط بالجدول (لا تنقل المعلم لمدرسة أخرى)
+      // المعلم: يعدّل اسمه وهاتفه فقط
+      allow update: if isAdmin()
+        || (isActiveSchool(resource.data.schoolId)
+            && request.resource.data.schoolId == resource.data.schoolId
+            && request.resource.data.status in ['pending', 'active', 'suspended'])
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'updatedAt']));
+
+      // المدرسة تحذف (رفض أو حذف)، والمعلم يمكنه سحب طلبه
+      allow delete: if isAdmin()
+        || isActiveSchool(resource.data.schoolId)
+        || (signedIn() && request.auth.uid == uid && resource.data.status == 'pending');
     }
   }
 }

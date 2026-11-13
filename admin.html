@@ -58,8 +58,8 @@
 </div>
 
 <script type="module">
-  import { auth, db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, lang, fillIcons } from "./assets/app.js";
-  import { collection, onSnapshot, doc, updateDoc, deleteDoc, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { auth, db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, lang, fillIcons, sendReset } from "./assets/app.js";
+  import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, getDocs, query, where, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   applyBranding();
 
   const user = await waitUser();
@@ -73,12 +73,28 @@
     fillIcons();
     document.querySelectorAll("[data-logout]").forEach(b => (b.onclick = logout));
 
-    let schools = [], filter = "pending", q = "";
+    let schools = [], filter = "pending", q = "", pub = null;
     onSnapshot(collection(db, "schools"), snap => {
       schools = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      render();
+      render(); syncPublic();
     }, e => toast(errMsg(e), "error"));
+    onSnapshot(collection(db, "publicSchools"), snap => {
+      pub = new Map(snap.docs.map(d => [d.id, d.data()])); syncPublic();
+    }, () => {});
+    // قائمة المدارس المفعّلة التي يختار منها المعلم عند التسجيل
+    async function syncPublic() {
+      if (!pub || !schools.length) return;
+      for (const s of schools) {
+        const p = pub.get(s.id);
+        try {
+          if (s.status === "active") {
+            if (!p || p.name !== s.name || (p.region || "") !== (s.region || "") || (p.wilayah || "") !== (s.wilayah || ""))
+              await setDoc(doc(db, "publicSchools", s.id), { name: s.name, region: s.region || "", wilayah: s.wilayah || "" });
+          } else if (p) await deleteDoc(doc(db, "publicSchools", s.id));
+        } catch (e) { /* تُعاد المحاولة في التحديث التالي */ }
+      }
+    }
 
     document.getElementById("filters").onclick = e => {
       const b = e.target.closest("button"); if (!b) return;
@@ -108,6 +124,7 @@
         if (s.status === "pending") acts.push(`<button class="btn sm success" data-a="active">✔ موافقة</button><button class="btn sm warn" data-a="rejected">رفض</button>`);
         if (s.status === "active") acts.push(`<button class="btn sm warn" data-a="suspended">إيقاف</button>`);
         if (s.status === "suspended" || s.status === "rejected") acts.push(`<button class="btn sm success" data-a="active">تفعيل</button>`);
+        if (s.email) acts.push(`<button class="btn sm" data-a="reset">إعادة تعيين كلمة المرور</button>`);
         acts.push(`<button class="btn sm danger" data-a="delete">حذف</button>`);
         return `<div class="card school-card" data-id="${s.id}">
           <div>
@@ -132,6 +149,12 @@
       const s = schools.find(x => x.id === id);
       const a = b.dataset.a;
       try {
+        if (a === "reset") {
+          if (!(await confirmBox(t("إرسال رابط إعادة تعيين كلمة المرور إلى {0}؟", s.email), "إرسال", false))) return;
+          await sendReset(s.email);
+          toast(t("تم إرسال رابط إعادة التعيين إلى {0}", s.email), "success");
+          return;
+        }
         if (a === "delete") {
           if (!(await confirmBox(t("حذف مدرسة «{0}» وكل بياناتها نهائيًا؟", s.name), "حذف نهائي"))) return;
           for (const sub of ["grades", "sections", "subjects", "teachers", "timetable"]) {
@@ -142,6 +165,9 @@
               await batch.commit();
             }
           }
+          const accs = (await getDocs(query(collection(db, "teacherAccounts"), where("schoolId", "==", id)))).docs;
+          for (const d of accs) await deleteDoc(d.ref);
+          await deleteDoc(doc(db, "publicSchools", id)).catch(() => {});
           await deleteDoc(doc(db, "schools", id));
           toast("تم حذف المدرسة", "success");
           return;

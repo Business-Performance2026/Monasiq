@@ -1,6 +1,6 @@
 // أدوات مشتركة بين صفحات المنصة
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, APP } from "./config.js";
 import { initI18n, isEn, tr, t, lang } from "./i18n.js";
@@ -66,14 +66,28 @@ export function waitUser() {
   });
 }
 
-// يحدد نوع المستخدم: admin | school(+status) | none
+// يحدد نوع المستخدم: admin | school(+status) | teacher(+status) | none
+const tryGet = async ref => { try { return await getDoc(ref); } catch (e) { return null; } };
 export async function getRole(user) {
   if (!user) return { role: "none" };
-  const a = await getDoc(doc(db, "admins", user.uid));
-  if (a.exists()) return { role: "admin" };
-  const s = await getDoc(doc(db, "schools", user.uid));
-  if (s.exists()) return { role: "school", status: s.data().status, school: { id: s.id, ...s.data() } };
+  const a = await tryGet(doc(db, "admins", user.uid));
+  if (a?.exists()) return { role: "admin" };
+  const s = await tryGet(doc(db, "schools", user.uid));
+  if (s?.exists()) return { role: "school", status: s.data().status, school: { id: s.id, ...s.data() } };
+  const t = await tryGet(doc(db, "teacherAccounts", user.uid));
+  if (t?.exists()) return { role: "teacher", status: t.data().status, account: { id: t.id, ...t.data() } };
   return { role: "none" };
+}
+
+// إرسال رابط إعادة تعيين كلمة المرور إلى البريد (بلغة المنصة، مع رابط عودة لصفحة الدخول)
+export async function sendReset(email) {
+  auth.languageCode = isEn ? "en" : "ar";
+  const back = { url: new URL("login.html", location.href).href };
+  try { await sendPasswordResetEmail(auth, email, back); }
+  catch (e) {
+    if (String(e?.code).includes("continue-uri") || String(e?.code).includes("unauthorized")) await sendPasswordResetEmail(auth, email);
+    else throw e;
+  }
 }
 
 export async function logout() {
@@ -103,6 +117,12 @@ export const STATUS = {
   active: { label: "مفعّلة", cls: "ok" },
   suspended: { label: "موقوفة", cls: "bad" },
   rejected: { label: "مرفوضة", cls: "bad" }
+};
+
+export const T_STATUS = {
+  pending: { label: "بانتظار الموافقة", cls: "warn" },
+  active: { label: "مفعّل", cls: "ok" },
+  suspended: { label: "موقوف", cls: "bad" }
 };
 
 export function defaultPeriods(count = 8, start = "08:00", dur = 45, gap = 15) {
@@ -137,6 +157,8 @@ const P = {
   chevL: '<path d="m15 5-7 7 7 7"/>',
   chevR: '<path d="m9 5 7 7-7 7"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  userCheck: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5 1.6 0 3 .4 4.1 1.2"/><path d="m15.5 17.5 2 2 4-4.5"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
   download: '<path d="M12 4v12M7 11l5 5 5-5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
   web: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/>'

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>تسجيل مدرسة | {app}</title>
+  <title>التسجيل | {app}</title>
   <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
   <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -14,60 +14,111 @@
     <a href="index.html" class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></a>
 
     <div class="card" id="formCard">
-      <h1>تسجيل مدرسة جديدة</h1>
-      <p class="sub">بعد إرسال الطلب ستراجعه إدارة المنصة وتفعّل حسابك.</p>
-      <form id="regForm" novalidate>
-        <div class="field"><label>اسم المدرسة *</label><input name="name" required placeholder="مثال: مدرسة أبو عبيدة (10-12)"></div>
-        <div class="grid-2">
-          <div class="field"><label>المحافظة / المنطقة *</label><input name="region" required placeholder="مثال: الداخلية"></div>
-          <div class="field"><label>الولاية / المدينة</label><input name="wilayah" placeholder="مثال: نزوى"></div>
-        </div>
-        <div class="field"><label>المراحل الدراسية</label><input name="stages" placeholder="مثال: من العاشر إلى الثاني عشر"></div>
-        <div class="grid-2">
-          <div class="field"><label>اسم المسؤول *</label><input name="principal" required placeholder="مدير المدرسة أو مسؤول الجدول"></div>
-          <div class="field"><label>رقم الهاتف *</label><input name="phone" required inputmode="tel" dir="ltr" placeholder="9xxxxxxx"></div>
-        </div>
-        <div class="field"><label>البريد الإلكتروني *</label><input name="email" type="email" required dir="ltr" autocomplete="email"></div>
-        <div class="grid-2">
-          <div class="field"><label>كلمة المرور *</label><input name="password" type="password" required minlength="6" dir="ltr" autocomplete="new-password"></div>
-          <div class="field"><label>تأكيد كلمة المرور *</label><input name="password2" type="password" required dir="ltr" autocomplete="new-password"></div>
-        </div>
-        <p class="error-text" id="err"></p>
-        <button class="btn primary block lg" id="submitBtn">إرسال طلب التسجيل</button>
-      </form>
+      <div class="seg wide" id="typeSeg">
+        <button type="button" data-type="school" class="active">تسجيل مدرسة</button>
+        <button type="button" data-type="teacher">تسجيل معلم</button>
+      </div>
+
+      <!-- تسجيل مدرسة -->
+      <div id="schoolPane">
+        <h1>تسجيل مدرسة جديدة</h1>
+        <p class="sub">بعد إرسال الطلب ستراجعه إدارة المنصة وتفعّل حسابك.</p>
+        <form id="regForm" novalidate>
+          <div class="field"><label>اسم المدرسة *</label><input name="name" required placeholder="مثال: مدرسة أبو عبيدة (10-12)"></div>
+          <div class="grid-2">
+            <div class="field"><label>المحافظة / المنطقة *</label><input name="region" required placeholder="مثال: الداخلية"></div>
+            <div class="field"><label>الولاية / المدينة</label><input name="wilayah" placeholder="مثال: نزوى"></div>
+          </div>
+          <div class="field"><label>المراحل الدراسية</label><input name="stages" placeholder="مثال: من العاشر إلى الثاني عشر"></div>
+          <div class="grid-2">
+            <div class="field"><label>اسم المسؤول *</label><input name="principal" required placeholder="مدير المدرسة أو مسؤول الجدول"></div>
+            <div class="field"><label>رقم الهاتف *</label><input name="phone" required inputmode="tel" dir="ltr" placeholder="9xxxxxxx"></div>
+          </div>
+          <div class="field"><label>البريد الإلكتروني *</label><input name="email" type="email" required dir="ltr" autocomplete="email"></div>
+          <div class="grid-2">
+            <div class="field"><label>كلمة المرور *</label><input name="password" type="password" required minlength="6" dir="ltr" autocomplete="new-password"></div>
+            <div class="field"><label>تأكيد كلمة المرور *</label><input name="password2" type="password" required dir="ltr" autocomplete="new-password"></div>
+          </div>
+          <p class="error-text" id="err"></p>
+          <button class="btn primary block lg" id="submitBtn">إرسال طلب التسجيل</button>
+        </form>
+      </div>
+
+      <!-- تسجيل معلم -->
+      <div id="teacherPane" class="hidden">
+        <h1>تسجيل معلم</h1>
+        <p class="sub">اختر مدرستك، وبعد موافقة إدارة المدرسة تستطيع الدخول ومشاهدة جدولك.</p>
+        <form id="tForm" novalidate>
+          <div class="field"><label>المدرسة *</label>
+            <select name="schoolId" id="schoolSel" required><option value="">جارٍ تحميل المدارس...</option></select>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>الاسم الكامل *</label><input name="name" required placeholder="كما هو في جدول المدرسة"></div>
+            <div class="field"><label>رقم الهاتف</label><input name="phone" inputmode="tel" dir="ltr" placeholder="9xxxxxxx"></div>
+          </div>
+          <div id="credFields">
+            <div class="field"><label>البريد الإلكتروني *</label><input name="email" type="email" dir="ltr" autocomplete="email"></div>
+            <div class="grid-2">
+              <div class="field"><label>كلمة المرور *</label><input name="password" type="password" minlength="6" dir="ltr" autocomplete="new-password"></div>
+              <div class="field"><label>تأكيد كلمة المرور *</label><input name="password2" type="password" dir="ltr" autocomplete="new-password"></div>
+            </div>
+          </div>
+          <div class="notice warn hidden" id="joinNote"></div>
+          <p class="error-text" id="tErr"></p>
+          <button class="btn primary block lg" id="tBtn">إرسال طلب الانضمام</button>
+        </form>
+      </div>
+
       <p class="auth-foot">لديك حساب؟ <a href="login.html">تسجيل الدخول</a></p>
     </div>
 
     <div class="card hidden" id="doneCard" style="text-align:center">
       <div class="success-ic">✅</div>
       <h1>تم استلام طلبك</h1>
-      <p class="muted">شكرًا لتسجيل <b id="doneName"></b>. طلبك الآن قيد المراجعة، وبعد تفعيله تستطيع الدخول بالبريد وكلمة المرور التي أدخلتها.</p>
+      <p class="muted" id="doneMsg"></p>
       <a href="index.html" class="btn primary">العودة للصفحة الرئيسية</a>
     </div>
   </div>
 </div>
 
 <script type="module">
-  import { auth, db, applyBranding, errMsg, configured, defaultPeriods } from "./assets/app.js";
+  import { auth, db, applyBranding, errMsg, configured, defaultPeriods, t, waitUser } from "./assets/app.js";
   import { createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { doc, setDoc, getDocs, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   applyBranding();
 
-  const f = document.getElementById("regForm");
-  const err = document.getElementById("err");
-  const btn = document.getElementById("submitBtn");
+  const $ = id => document.getElementById(id);
+  const qs = new URLSearchParams(location.search);
+  let type = qs.get("type") === "teacher" ? "teacher" : "school";
+  const joinMode = qs.get("join") === "1";
 
+  function setType(tp) {
+    type = tp;
+    document.querySelectorAll("#typeSeg button").forEach(b => b.classList.toggle("active", b.dataset.type === tp));
+    $("schoolPane").classList.toggle("hidden", tp !== "school");
+    $("teacherPane").classList.toggle("hidden", tp !== "teacher");
+    if (tp === "teacher") loadSchools();
+  }
+  $("typeSeg").onclick = e => { const b = e.target.closest("button"); if (b) setType(b.dataset.type); };
+
+  function done(msg) {
+    $("doneMsg").textContent = msg;
+    $("formCard").classList.add("hidden");
+    $("doneCard").classList.remove("hidden");
+  }
+
+  // ---------- تسجيل مدرسة ----------
+  const f = $("regForm"), err = $("err"), btn = $("submitBtn");
   f.addEventListener("submit", async e => {
     e.preventDefault();
     err.textContent = "";
     const d = Object.fromEntries(new FormData(f).entries());
     for (const k in d) d[k] = d[k].trim();
-    if (!d.name || !d.region || !d.principal || !d.phone || !d.email || !d.password) return (err.textContent = "يرجى تعبئة جميع الحقول المطلوبة (*)");
-    if (d.password.length < 6) return (err.textContent = "كلمة المرور يجب أن تكون 6 أحرف على الأقل");
-    if (d.password !== d.password2) return (err.textContent = "كلمتا المرور غير متطابقتين");
-    if (!configured) return (err.textContent = "المنصة غير مربوطة بـ Firebase بعد");
-
-    btn.disabled = true; btn.textContent = "جارٍ الإرسال...";
+    if (!d.name || !d.region || !d.principal || !d.phone || !d.email || !d.password) return (err.textContent = t("يرجى تعبئة جميع الحقول المطلوبة (*)"));
+    if (d.password.length < 6) return (err.textContent = t("كلمة المرور يجب أن تكون 6 أحرف على الأقل"));
+    if (d.password !== d.password2) return (err.textContent = t("كلمتا المرور غير متطابقتين"));
+    if (!configured) return (err.textContent = t("المنصة غير مربوطة بـ Firebase بعد"));
+    btn.disabled = true;
     try {
       const cred = await createUserWithEmailAndPassword(auth, d.email, d.password);
       await setDoc(doc(db, "schools", cred.user.uid), {
@@ -78,13 +129,60 @@
         createdAt: serverTimestamp()
       });
       await signOut(auth);
-      document.getElementById("doneName").textContent = d.name;
-      document.getElementById("formCard").classList.add("hidden");
-      document.getElementById("doneCard").classList.remove("hidden");
-    } catch (ex) {
-      err.textContent = errMsg(ex);
-      btn.disabled = false; btn.textContent = "إرسال طلب التسجيل";
+      done(t("شكرًا لتسجيل {0}. طلبك الآن قيد المراجعة، وبعد تفعيله تستطيع الدخول بالبريد وكلمة المرور التي أدخلتها.", d.name));
+    } catch (ex) { err.textContent = errMsg(ex); btn.disabled = false; }
+  });
+
+  // ---------- تسجيل معلم ----------
+  let schoolsLoaded = false, schools = [];
+  async function loadSchools() {
+    if (schoolsLoaded) return;
+    const sel = $("schoolSel");
+    try {
+      const snap = await getDocs(collection(db, "publicSchools"));
+      schools = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(b.name, "ar"));
+      sel.innerHTML = `<option value="">${t("— اختر مدرستك —")}</option>` + schools.map(s =>
+        `<option value="${s.id}">${escapeHtml(s.name)}${s.region ? " — " + escapeHtml(s.region) : ""}</option>`).join("");
+      if (!schools.length) sel.innerHTML = `<option value="">${t("لا توجد مدارس مفعّلة بعد")}</option>`;
+      schoolsLoaded = true;
+    } catch (ex) { sel.innerHTML = `<option value="">${t("تعذّر تحميل المدارس")}</option>`; }
+  }
+  function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+  // وضع الانضمام: مستخدم مسجّل دخول وليس مرتبطًا بمدرسة
+  let joinUser = null;
+  if (joinMode) {
+    joinUser = await waitUser();
+    if (joinUser) {
+      $("credFields").classList.add("hidden");
+      $("typeSeg").classList.add("hidden");
+      $("joinNote").classList.remove("hidden");
+      $("joinNote").textContent = t("أنت مسجّل الدخول بالبريد {0}. اختر مدرستك لإرسال طلب انضمام جديد.", joinUser.email);
     }
+  }
+  setType(joinUser ? "teacher" : type);
+
+  const tf = $("tForm"), tErr = $("tErr"), tBtn = $("tBtn");
+  tf.addEventListener("submit", async e => {
+    e.preventDefault();
+    tErr.textContent = "";
+    const d = Object.fromEntries(new FormData(tf).entries());
+    for (const k in d) d[k] = String(d[k]).trim();
+    if (!d.schoolId || !d.name || (!joinUser && (!d.email || !d.password))) return (tErr.textContent = t("يرجى تعبئة جميع الحقول المطلوبة (*)"));
+    if (!joinUser && d.password.length < 6) return (tErr.textContent = t("كلمة المرور يجب أن تكون 6 أحرف على الأقل"));
+    if (!joinUser && d.password !== d.password2) return (tErr.textContent = t("كلمتا المرور غير متطابقتين"));
+    if (!configured) return (tErr.textContent = t("المنصة غير مربوطة بـ Firebase بعد"));
+    const school = schools.find(s => s.id === d.schoolId);
+    tBtn.disabled = true;
+    try {
+      const user = joinUser || (await createUserWithEmailAndPassword(auth, d.email, d.password)).user;
+      await setDoc(doc(db, "teacherAccounts", user.uid), {
+        name: d.name, phone: d.phone, email: user.email || d.email,
+        schoolId: d.schoolId, schoolName: school?.name || "", status: "pending", createdAt: serverTimestamp()
+      });
+      await signOut(auth);
+      done(t("تم إرسال طلب انضمامك إلى {0}. بعد موافقة إدارة المدرسة تستطيع الدخول ومشاهدة جدولك.", school?.name || ""));
+    } catch (ex) { tErr.textContent = errMsg(ex); tBtn.disabled = false; }
   });
 </script>
 </body>

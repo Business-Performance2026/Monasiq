@@ -411,3 +411,39 @@ table.tt.tr { min-width: 0; }
   .lsn .lk { display: none; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ============ Accounts ============ */
+.seg.wide { display: flex; width: 100%; margin-bottom: 1.2rem; }
+.seg.wide button { flex: 1; }
+.nbadge { margin-inline-start: auto; background: var(--bad); color: #fff; font-size: .72rem; font-weight: 800; min-width: 20px; height: 20px; border-radius: 99px; display: inline-grid; place-items: center; padding: 0 6px; font-style: normal; }
+.bottom-nav a { position: relative; }
+.nbadge.dotb { position: absolute; top: 2px; inset-inline-end: 22%; min-width: 10px; width: 10px; height: 10px; padding: 0; font-size: 0; }
+.notice.info-n { background: var(--primary-soft); color: #115e59; }
+.acc-alert { display: flex; align-items: center; gap: .5rem; text-decoration: none; }
+.acc-card { display: flex; flex-direction: column; gap: .8rem; }
+.acc-head { display: flex; gap: .8rem; align-items: center; }
+.acc-av { width: 44px; height: 44px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; font-weight: 800; font-size: 1.2rem; flex-shrink: 0; }
+.acc-main { min-width: 0; }
+.acc-main .meta { color: var(--muted); font-size: .88rem; overflow-wrap: anywhere; }
+.acc-link label { margin-bottom: .3rem; }
+.acc-link small { display: block; margin-top: .25rem; }
+.acc-linked { display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .92rem; }
+
+/* ============ Teacher page ============ */
+.tp-top { display: flex; align-items: center; justify-content: space-between; gap: .6rem; background: rgba(255,255,255,.95); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); padding: .6rem 1.2rem; padding-top: calc(.6rem + env(safe-area-inset-top)); position: sticky; top: 0; z-index: 100; }
+.tp-top .tb-title { display: flex; align-items: center; gap: .55rem; min-width: 0; }
+.tp-top .tb-title b { display: block; font-size: 1.05rem; line-height: 1.2; }
+.tp-top .tb-title small { display: block; color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw; }
+.tp-top .tb-actions { display: flex; gap: .45rem; align-items: center; }
+.tp-main { width: min(1000px, 100%); margin: 0 auto; padding: 1.2rem 1rem calc(2rem + env(safe-area-inset-bottom)); }
+.tp-hello { font-size: 1.4rem; margin-bottom: 1rem; }
+.tt-cell.ro { cursor: default; }
+.today-list { display: flex; flex-direction: column; gap: .5rem; }
+.today-item { display: grid; grid-template-columns: 52px 1fr auto; gap: .8rem; align-items: center; background: color-mix(in srgb, var(--c) 10%, #fff); border-inline-start: 4px solid var(--c); border-radius: 12px; padding: .55rem .8rem; }
+.ti-p { text-align: center; } .ti-p b { display: block; font-size: 1.3rem; line-height: 1.1; } .ti-p small { color: var(--muted); font-size: .72rem; }
+.ti-b b { display: block; font-size: 1.1rem; } .ti-b span { color: var(--muted); font-size: .88rem; }
+.ti-t { color: var(--muted); font-size: .85rem; direction: ltr; white-space: nowrap; }
+.acc-info { display: grid; grid-template-columns: repeat(2, 1fr); gap: .7rem 1rem; margin-bottom: 1rem; }
+.acc-info div { display: flex; flex-direction: column; } .acc-info span { color: var(--muted); font-size: .82rem; } .acc-info b { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .acc-info { grid-template-columns: 1fr; } .ti-t { display: none; } .today-item { grid-template-columns: 46px 1fr; } }
+@media (max-width: 480px) { .tp-top .l-full { display: none; } .tp-top .l-short { display: inline; } }

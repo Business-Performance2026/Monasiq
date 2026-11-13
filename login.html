@@ -24,13 +24,14 @@
       </form>
       <p class="auth-foot"><a href="#" id="forgot">نسيت كلمة المرور؟</a></p>
       <p class="auth-foot">مدرستك غير مسجلة؟ <a href="register.html">سجّل الآن</a></p>
+      <p class="auth-foot">معلم جديد؟ <a href="register.html?type=teacher">سجّل كمعلم</a></p>
     </div>
   </div>
 </div>
 
 <script type="module">
-  import { auth, applyBranding, errMsg, getRole, configured, esc, t } from "./assets/app.js";
-  import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { auth, applyBranding, errMsg, getRole, configured, esc, t, sendReset } from "./assets/app.js";
+  import { signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   applyBranding();
 
   const f = document.getElementById("loginForm");
@@ -42,7 +43,9 @@
     pending: ["warn", "طلب تسجيل مدرستك قيد المراجعة. ستتمكن من الدخول بعد تفعيل الحساب من إدارة المنصة."],
     suspended: ["bad", "حساب المدرسة موقوف حاليًا. تواصل مع إدارة المنصة."],
     rejected: ["bad", "تم رفض طلب تسجيل المدرسة. تواصل مع إدارة المنصة للمزيد من التفاصيل."],
-    none: ["bad", "هذا الحساب غير مرتبط بأي مدرسة."]
+    none: ["bad", "هذا الحساب غير مرتبط بأي مدرسة."],
+    t_pending: ["warn", "طلب انضمامك قيد المراجعة من إدارة المدرسة. ستتمكن من الدخول بعد الموافقة."],
+    t_suspended: ["bad", "حسابك موقوف حاليًا. تواصل مع إدارة مدرستك."]
   };
   function show(key) {
     const [cls, txt] = MSG[key] || MSG.none;
@@ -55,9 +58,16 @@
     const r = await getRole(user);
     if (r.role === "admin") return location.replace("admin.html");
     if (r.role === "school" && r.status === "active") return location.replace("dashboard.html");
+    if (r.role === "teacher" && r.status === "active") return location.replace("teacher.html");
+    if (r.role === "none") {
+      // حساب بدون مدرسة (مثلًا حذفته المدرسة): يمكنه طلب الانضمام مجددًا
+      notice.innerHTML = `<div class="notice bad">${esc(t("هذا الحساب غير مرتبط بأي مدرسة."))}<br><a class="btn sm primary" style="margin-top:.5rem" href="register.html?type=teacher&join=1">${esc(t("طلب انضمام لمدرسة"))}</a></div>`;
+      btn.disabled = false; btn.textContent = t("دخول");
+      return;
+    }
     await signOut(auth);
-    show(r.role === "school" ? r.status : "none");
-    btn.disabled = false; btn.textContent = "دخول";
+    show(r.role === "school" ? r.status : "t_" + r.status);
+    btn.disabled = false; btn.textContent = t("دخول");
   }
 
   f.addEventListener("submit", async e => {
@@ -81,7 +91,7 @@
     const email = f.email.value.trim();
     if (!email) return (err.textContent = "اكتب بريدك الإلكتروني أولًا ثم اضغط «نسيت كلمة المرور»");
     try {
-      await sendPasswordResetEmail(auth, email);
+      await sendReset(email);
       notice.innerHTML = `<div class="notice ok">${esc(t("أرسلنا رابط إعادة تعيين كلمة المرور إلى {0}", email))}</div>`;
       err.textContent = "";
     } catch (ex) { err.textContent = errMsg(ex); }

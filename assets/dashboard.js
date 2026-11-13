@@ -1,19 +1,19 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn } from "./app.js";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js";
 import { setLang } from "./i18n.js";
 import { schedule, reconcile } from "./scheduler.js";
 import {
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp
+  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 applyBranding();
 
 
 // ---------- الحالة ----------
-let SID;
+let SID, pubLast = "";
 const loaded = new Set();
 const NEED = 6; // school, grades, sections, subjects, teachers, timetable
-const S = { school: null, grades: [], sections: [], subjects: [], teachers: [] };
+const S = { school: null, grades: [], sections: [], subjects: [], teachers: [], accounts: [] };
 const $ = id => document.getElementById(id);
 const col = name => collection(db, "schools", SID, name);
 const dref = (name, id) => doc(db, "schools", SID, name, id);
@@ -52,6 +52,8 @@ function init(user) {
     S.school = { id: d.id, ...d.data() };
     if (S.school.status !== "active") return location.replace("login.html?s=" + S.school.status);
     document.querySelectorAll("[data-school-name]").forEach(e => { e.textContent = S.school.name; e.setAttribute("data-no-i18n", ""); });
+    const pubData = { name: S.school.name, region: S.school.region || "", wilayah: S.school.wilayah || "" };
+    if (JSON.stringify(pubData) !== pubLast) { pubLast = JSON.stringify(pubData); setDoc(doc(db, "publicSchools", SID), pubData).catch(() => { pubLast = ""; }); }
     loaded.has("school") ? render() : mark("school");
   }, e => toast(errMsg(e), "error"));
 
@@ -61,6 +63,12 @@ function init(user) {
     subjects: (a, b) => a.name.localeCompare(b.name, "ar"),
     teachers: (a, b) => a.name.localeCompare(b.name, "ar")
   };
+  onSnapshot(query(collection(db, "teacherAccounts"), where("schoolId", "==", SID)), snap => {
+    S.accounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const n = S.accounts.filter(a => a.status === "pending").length;
+    document.querySelectorAll("[data-acc-badge]").forEach(b => { b.textContent = n; b.classList.toggle("hidden", !n); });
+    if (loaded.size >= NEED && ["#accounts", "#overview", ""].includes(location.hash)) render();
+  }, () => {});
   onSnapshot(doc(db, "schools", SID, "timetable", "main"), d => {
     if (!TT.dirty && !TT.saving) { TT.saved = d.exists() ? (d.data().lessons || []) : []; TT.lessons = null; }
     loaded.has("timetable") ? (location.hash === "#timetable" ? null : render()) : mark("timetable");
@@ -76,12 +84,12 @@ function init(user) {
 }
 
 // ---------- التوجيه ----------
-const VIEWS = { overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable };
+const VIEWS = { overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable, accounts: vAccounts };
 function render() {
   if (loaded.size < NEED) return;
   const v = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
   document.querySelectorAll("#nav a, #bnav a, #sheet a").forEach(a => a.classList.toggle("active", a.dataset.v === v));
-  document.querySelector("[data-more]").classList.toggle("active", v === "settings" || v === "grades");
+  document.querySelector("[data-more]").classList.toggle("active", v === "settings" || v === "grades" || v === "accounts");
   const view = $("view");
   view.onclick = null;
   document.body.classList.remove("has-sel");
@@ -108,6 +116,7 @@ function vOverview() {
     [S.teachers.length, "#teachers", "أضف المعلمين وأسند لهم الشعب"]
   ];
   const showSteps = steps.some(s => !s[0]);
+  const pendingAcc = S.accounts.filter(a => a.status === "pending").length;
 
   const tRows = S.teachers.map(t => {
     const l = load(t), max = num(t.maxLoad) || 0, pct = max ? Math.min(100, (l / max) * 100) : 0;
@@ -136,6 +145,7 @@ function vOverview() {
     <div class="stat"><div class="n">${S.subjects.length}</div><div class="l">مادة</div></div>
     <div class="stat"><div class="n">${totalAssigned}</div><div class="l">حصة مُسندة أسبوعيًا</div></div>
   </div>
+  ${pendingAcc ? `<a class="notice warn acc-alert" href="#accounts"><span data-ic="userCheck"></span> ${esc(tf("لديك {0} طلب انضمام من معلمين بانتظار موافقتك", pendingAcc))} ←</a>` : ""}
   ${showSteps ? `<div class="card"><h3>ابدأ من هنا</h3>
     ${steps.map((s, i) => `<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem 0">
       <span class="badge ${s[0] ? "ok" : "warn"}">${s[0] ? "✔" : i + 1}</span>
@@ -212,6 +222,7 @@ function vSettings() {
     </div>
   </div>`;
 }
+BIND.overview = v => fillIcons(v);
 BIND.settings = v => {
   const drawP = () => {
     $("pBody").innerHTML = draftPeriods.map((p, i) => `<tr><td><b>${i + 1}</b></td>
@@ -930,6 +941,135 @@ function ttPrint(kind) {
   if (!pa) { pa = document.createElement("div"); pa.id = "printArea"; document.body.appendChild(pa); }
   pa.innerHTML = html;
   setTimeout(() => window.print(), 300);
+}
+
+// =====================================================
+//  حسابات المعلمين
+// =====================================================
+let accFilter = "pending";
+const normName = s => String(s || "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\bال/g, "").replace(/\s+/g, " ").trim();
+function bestTeacherMatch(name) {
+  const a = normName(name).split(" ").filter(Boolean);
+  let best = null, bs = 0;
+  for (const t of S.teachers) {
+    const b = normName(t.name).split(" ").filter(Boolean);
+    let sc = 0;
+    a.forEach((w, i) => { if (b.includes(w)) sc += i === 0 ? 3 : 1; });
+    if (normName(t.name) === normName(name)) sc += 10;
+    if (sc > bs) { bs = sc; best = t; }
+  }
+  return bs >= 3 ? best : null;
+}
+const linkedTo = id => S.accounts.find(a => a.teacherId === id && a.status !== "pending");
+function teacherOptions(sel, selfId) {
+  return `<option value="">${tr("— بدون ربط —")}</option>` + S.teachers.map(t => {
+    const other = linkedTo(t.id);
+    const taken = other && other.id !== selfId;
+    return `<option value="${t.id}" ${t.id === sel ? "selected" : ""}>${esc(t.name)}${taken ? " ⚠" : ""}</option>`;
+  }).join("");
+}
+
+function vAccounts() {
+  const c = st => S.accounts.filter(a => a.status === st).length;
+  const rows = S.accounts.filter(a => a.status === accFilter)
+    .sort((x, y) => (y.createdAt?.seconds || 0) - (x.createdAt?.seconds || 0));
+  return `
+  <div class="page-title"><h1>حسابات المعلمين</h1></div>
+  <div class="notice info-n">يسجّل المعلم من صفحة «التسجيل» ويختار مدرستك، ثم يظهر طلبه هنا. بعد الموافقة يربط بجدوله في المدرسة ويستطيع الدخول ومشاهدة جدوله.</div>
+  <div class="tabs" id="accTabs">
+    <button data-f="pending" class="${accFilter === "pending" ? "active" : ""}">${tr("طلبات الانضمام")} (${c("pending")})</button>
+    <button data-f="active" class="${accFilter === "active" ? "active" : ""}">${tr("المفعّلون")} (${c("active")})</button>
+    <button data-f="suspended" class="${accFilter === "suspended" ? "active" : ""}">${tr("الموقوفون")} (${c("suspended")})</button>
+  </div>
+  <div id="accList">
+  ${rows.length ? rows.map(a => {
+    const st = T_STATUS[a.status] || { label: a.status, cls: "info" };
+    const linked = S.teachers.find(t => t.id === a.teacherId);
+    const sug = a.status === "pending" ? (linked || bestTeacherMatch(a.name)) : linked;
+    const date = a.createdAt?.toDate ? a.createdAt.toDate().toLocaleDateString(isEn ? "en-GB" : "ar-OM") : "";
+    return `<div class="card acc-card" data-id="${a.id}">
+      <div class="acc-head">
+        <div class="acc-av">${esc(String(a.name || "?").trim().charAt(0))}</div>
+        <div class="acc-main">
+          <b>${esc(a.name)}</b> <span class="badge ${st.cls}">${st.label}</span>
+          <div class="meta"><span dir="ltr">${esc(a.email || "")}</span>${a.phone ? ` · <span dir="ltr">${esc(a.phone)}</span>` : ""}${date ? ` · ${date}` : ""}</div>
+        </div>
+      </div>
+      ${a.status === "pending" ? `
+        <div class="acc-link"><label>ربط الحساب بالمعلم في جدول المدرسة</label>
+          <select data-link>${teacherOptions(sug?.id, a.id)}</select>
+          ${sug && !linked ? `<small class="muted">${esc(tf("اقتراح تلقائي حسب الاسم: {0}", sug.name))}</small>` : ""}
+        </div>
+        <div class="row-actions"><button class="btn sm success" data-a="approve">✔ موافقة</button><button class="btn sm danger" data-a="reject">رفض</button></div>`
+      : `
+        <div class="acc-linked">${linked ? `<span data-ic="timetable" data-size="16"></span> ${esc(tf("مرتبط بجدول: {0}", linked.name))}` : `<span class="badge warn">غير مرتبط بجدول</span>`}</div>
+        <div class="row-actions">
+          ${a.status === "active" ? `<button class="btn sm warn" data-a="suspend">إيقاف</button>` : `<button class="btn sm success" data-a="activate">تفعيل</button>`}
+          <button class="btn sm" data-a="edit">تعديل</button>
+          <button class="btn sm" data-a="reset">إعادة تعيين كلمة المرور</button>
+          <button class="btn sm danger" data-a="delete">حذف</button>
+        </div>`}
+    </div>`;
+  }).join("") : `<div class="card empty"><div class="big">👩‍🏫</div>${tr({ pending: "لا توجد طلبات انضمام جديدة", active: "لا يوجد معلمون مفعّلون", suspended: "لا يوجد معلمون موقوفون" }[accFilter])}</div>`}
+  </div>`;
+}
+BIND.accounts = v => {
+  fillIcons(v);
+  $("accTabs").onclick = e => { const b = e.target.closest("button"); if (!b) return; accFilter = b.dataset.f; render(); };
+  $("accList").onclick = async e => {
+    const b = e.target.closest("[data-a]"); if (!b) return;
+    const card = b.closest("[data-id]"), a = S.accounts.find(x => x.id === card.dataset.id);
+    const ref = doc(db, "teacherAccounts", a.id);
+    try {
+      switch (b.dataset.a) {
+        case "approve": {
+          const tid = card.querySelector("[data-link]").value;
+          const other = tid && linkedTo(tid);
+          if (other && other.id !== a.id && !(await confirmBox(tf("هذا المعلم مرتبط بحساب آخر ({0}). المتابعة ستربط الحسابين بنفس الجدول.", other.email), "متابعة", false))) return;
+          await updateDoc(ref, { status: "active", teacherId: tid || null, approvedAt: serverTimestamp() });
+          toast(tf("تمت الموافقة على {0} ✅", a.name), "success");
+          break;
+        }
+        case "reject":
+          if (!(await confirmBox(tf("رفض طلب {0}؟", a.name), "رفض"))) return;
+          await deleteDoc(ref); toast("تم رفض الطلب", "success"); break;
+        case "suspend":
+          if (!(await confirmBox(tf("إيقاف حساب {0}؟ لن يتمكن من الدخول حتى تعيد تفعيله.", a.name), "إيقاف"))) return;
+          await updateDoc(ref, { status: "suspended" }); toast("تم إيقاف الحساب", "success"); break;
+        case "activate":
+          await updateDoc(ref, { status: "active" }); toast("تم تفعيل الحساب", "success"); break;
+        case "reset":
+          if (!(await confirmBox(tf("إرسال رابط إعادة تعيين كلمة المرور إلى {0}؟", a.email), "إرسال", false))) return;
+          await sendReset(a.email);
+          toast(tf("تم إرسال رابط إعادة التعيين إلى {0}", a.email), "success"); break;
+        case "delete":
+          if (!(await confirmBox(tf("حذف حساب {0} من المدرسة؟ لن يتمكن من الدخول لمدرستك.", a.name), "حذف"))) return;
+          await deleteDoc(ref); toast("تم حذف الحساب", "success"); break;
+        case "edit": accountModal(a); break;
+      }
+    } catch (ex) { toast(errMsg(ex), "error"); }
+  };
+};
+function accountModal(a) {
+  openModal(`${modalHead(tr("تعديل حساب المعلم"))}
+  <form id="accForm">
+    <div class="grid-2">
+      <div class="field"><label>الاسم الكامل</label><input name="name" value="${esc(a.name)}" required></div>
+      <div class="field"><label>رقم الهاتف</label><input name="phone" dir="ltr" value="${esc(a.phone || "")}"></div>
+    </div>
+    <div class="field"><label>البريد الإلكتروني</label><input value="${esc(a.email || "")}" dir="ltr" disabled></div>
+    <div class="field"><label>ربط الحساب بالمعلم في جدول المدرسة</label><select name="teacherId">${teacherOptions(a.teacherId, a.id)}</select></div>
+    <div class="modal-actions"><button class="btn primary">حفظ</button><button type="button" class="btn ghost" data-close>إلغاء</button></div>
+  </form>`);
+  $("accForm").onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target;
+    if (!f.name.value.trim()) return;
+    try {
+      await updateDoc(doc(db, "teacherAccounts", a.id), { name: f.name.value.trim(), phone: f.phone.value.trim(), teacherId: f.teacherId.value || null, updatedAt: serverTimestamp() });
+      closeModal(); toast("تم الحفظ", "success");
+    } catch (ex) { toast(errMsg(ex), "error"); }
+  };
 }
 
 // ---------- التحقق من الدخول ----------
