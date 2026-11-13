@@ -1,8 +1,9 @@
 // لوحة تحكم المدرسة
 import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn } from "./app.js";
 import { setLang } from "./i18n.js";
+import { schedule, reconcile } from "./scheduler.js";
 import {
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp
+  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 applyBranding();
@@ -11,7 +12,7 @@ applyBranding();
 // ---------- الحالة ----------
 let SID;
 const loaded = new Set();
-const NEED = 5; // school, grades, sections, subjects, teachers
+const NEED = 6; // school, grades, sections, subjects, teachers, timetable
 const S = { school: null, grades: [], sections: [], subjects: [], teachers: [] };
 const $ = id => document.getElementById(id);
 const col = name => collection(db, "schools", SID, name);
@@ -43,7 +44,7 @@ function init(user) {
   lb.textContent = isEn ? "العربية" : "English"; lb.setAttribute("data-no-i18n", "");
   document.querySelector("[data-lang-toggle-row]").onclick = () => setLang(isEn ? "ar" : "en");
   window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
-  $("modalBack").addEventListener("click", e => { if (e.target.id === "modalBack") closeModal(); });
+  $("modalBack").addEventListener("click", e => { if (e.target.id === "modalBack" && !$("modalBack").dataset.lock) closeModal(); });
 
   const mark = k => { loaded.add(k); render(); };
 
@@ -60,6 +61,10 @@ function init(user) {
     subjects: (a, b) => a.name.localeCompare(b.name, "ar"),
     teachers: (a, b) => a.name.localeCompare(b.name, "ar")
   };
+  onSnapshot(doc(db, "schools", SID, "timetable", "main"), d => {
+    if (!TT.dirty && !TT.saving) { TT.saved = d.exists() ? (d.data().lessons || []) : []; TT.lessons = null; }
+    loaded.has("timetable") ? (location.hash === "#timetable" ? null : render()) : mark("timetable");
+  }, e => { toast(errMsg(e), "error"); mark("timetable"); });
   for (const k of ["grades", "sections", "subjects", "teachers"]) {
     onSnapshot(col(k), snap => {
       S[k] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -76,9 +81,10 @@ function render() {
   if (loaded.size < NEED) return;
   const v = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
   document.querySelectorAll("#nav a, #bnav a, #sheet a").forEach(a => a.classList.toggle("active", a.dataset.v === v));
-  document.querySelector("[data-more]").classList.toggle("active", v === "settings" || v === "timetable");
+  document.querySelector("[data-more]").classList.toggle("active", v === "settings" || v === "grades");
   const view = $("view");
   view.onclick = null;
+  document.body.classList.remove("has-sel");
   view.innerHTML = VIEWS[v]();
   BIND[v]?.(view);
 }
@@ -521,28 +527,299 @@ function teacherModal(t) {
 }
 
 // =====================================================
-//  توزيع الجدول (المرحلة الثانية)
+//  توزيع الجدول
 // =====================================================
+const TT = { saved: null, lessons: null, dirty: false, saving: false, timer: null, savedOk: true };
+const TV = { mode: "teacher", id: null, sel: null };
+let ttOrient = null;
+
+function ttDims() { return { D: settings().days.length, P: settings().periods.length }; }
+function ttSync() {
+  const { D, P } = ttDims();
+  const base = TT.lessons ?? TT.saved ?? [];
+  const before = TT.lessons ? TT.lessons.length : -1;
+  TT.lessons = reconcile(S.teachers, base, D, P, new Set(S.sections.map(s => s.id)));
+  if (TT.lessons.length !== before) TV.sel = null;
+  if (TV.sel != null && !TT.lessons[TV.sel]) TV.sel = null;
+}
+function ttIndex() {
+  const tS = new Map(), cS = new Map();
+  TT.lessons.forEach((x, i) => { if (x.d != null) { tS.set(`${x.t}@${x.d}.${x.p}`, i); cS.set(`${x.c}@${x.d}.${x.p}`, i); } });
+  return { tS, cS };
+}
+const DAY_EN = { "الأحد": "Sun", "الاثنين": "Mon", "الثلاثاء": "Tue", "الأربعاء": "Wed", "الخميس": "Thu", "الجمعة": "Fri", "السبت": "Sat" };
+const shortDay = d => isEn ? (DAY_EN[d] || d) : String(d).replace(/^ال/, "");
+const shortName = n => String(n || "").split(/\s+/).slice(0, 2).join(" ");
+const teacherOf = id => S.teachers.find(t => t.id === id);
+
+function ttMark() {
+  TT.dirty = true; TT.savedOk = false;
+  clearTimeout(TT.timer);
+  TT.timer = setTimeout(ttSave, 1200);
+}
+async function ttSave() {
+  if (!TT.dirty) return;
+  TT.saving = true; ttStatus();
+  try {
+    await setDoc(doc(db, "schools", SID, "timetable", "main"), {
+      lessons: TT.lessons.map(x => ({ t: x.t, s: x.s, c: x.c, d: x.d ?? null, p: x.p ?? null, l: !!x.l })),
+      updatedAt: serverTimestamp()
+    });
+    TT.dirty = false; TT.savedOk = true;
+  } catch (e) { toast(errMsg(e), "error"); }
+  TT.saving = false; ttStatus();
+}
+function ttStatus() {
+  const el = $("ttSave"); if (!el) return;
+  el.className = "save-state " + (TT.saving || TT.dirty ? "busy" : "ok");
+  el.textContent = tr(TT.saving || TT.dirty ? "جارٍ الحفظ" : "محفوظ");
+}
+window.addEventListener("beforeunload", e => { if (TT.dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+// هل يمكن نقل الحصة i إلى الخانة (d,p)؟
+function canMove(i, d, p, idx) {
+  const L = TT.lessons[i];
+  if (L.d === d && L.p === p) return { ok: false, same: true };
+  const a = idx.tS.get(`${L.t}@${d}.${p}`), b = idx.cS.get(`${L.c}@${d}.${p}`);
+  if (a == null && b == null) return { ok: true };
+  if (a != null && b != null && a !== b) {
+    return { ok: false, reason: tf("المعلم والشعبة كلاهما مشغولان في هذا الوقت") };
+  }
+  const j = a ?? b, J = TT.lessons[j];
+  if (J.l) return { ok: false, reason: tf("الخانة فيها حصة مثبتة") };
+  if (L.d == null) {
+    return { ok: false, reason: a != null ? tf("المعلم لديه حصة مع {0} في هذا الوقت", secLabel(section(J.c))) : tf("الشعبة {0} لديها حصة {1} في هذا الوقت", secLabel(section(J.c)), subject(J.s)?.name || "") };
+  }
+  // تبديل: هل تستطيع الحصة j الذهاب إلى مكان L؟
+  const ta = idx.tS.get(`${J.t}@${L.d}.${L.p}`), cb = idx.cS.get(`${J.c}@${L.d}.${L.p}`);
+  if ((ta == null || ta === i) && (cb == null || cb === i)) return { ok: true, swap: j };
+  return {
+    ok: false,
+    reason: a != null ? tf("المعلم لديه حصة مع {0} في هذا الوقت", secLabel(section(J.c)))
+      : tf("الشعبة {0} لديها حصة {1} في هذا الوقت", secLabel(section(J.c)), subject(J.s)?.name || "")
+  };
+}
+
 function vTimetable() {
-  const over = S.teachers.filter(t => num(t.maxLoad) && load(t) > num(t.maxLoad)).length;
-  const cap = capacity();
-  const fullSecs = S.sections.filter(s => assignedFor(s.id).total > cap).length;
+  ttSync();
+  const { D, P } = ttDims();
+  const st = settings();
+  const all = TT.lessons, placed = all.filter(x => x.d != null).length, locked = all.filter(x => x.l).length;
+  const cap = D * P;
+  if (!all.length) return `
+    <div class="page-title"><h1>توزيع الجدول</h1></div>
+    <div class="card empty"><div class="big">🗓️</div><h3>لا توجد حصص لتوزيعها</h3>
+    <p>أضف المعلمين وأسند لهم الشعب أولًا، ثم ارجع هنا للتوزيع.</p><a class="btn primary" href="#teachers">المعلمون</a></div>`;
+
+  const tLoads = new Map(), cLoads = new Map();
+  for (const x of all) { tLoads.set(x.t, (tLoads.get(x.t) || 0) + 1); cLoads.set(x.c, (cLoads.get(x.c) || 0) + 1); }
+  const overT = [...tLoads].filter(([, n]) => n > cap), overC = [...cLoads].filter(([, n]) => n > cap);
+
+  const ents = TV.mode === "teacher"
+    ? S.teachers.filter(t => tLoads.has(t.id)).map(t => ({ id: t.id, name: t.name }))
+    : S.sections.filter(s => cLoads.has(s.id)).map(s => ({ id: s.id, name: secLabel(s) }));
+  if (!ents.some(e => e.id === TV.id)) TV.id = ents[0]?.id || null;
+  const unByEnt = new Map();
+  for (const x of all) if (x.d == null) { const k = TV.mode === "teacher" ? x.t : x.c; unByEnt.set(k, (unByEnt.get(k) || 0) + 1); }
+  const pos = ents.findIndex(e => e.id === TV.id);
+
   return `
-  <div class="page-title"><h1>توزيع الجدول</h1></div>
-  <div class="card empty">
-    <div class="big">🧩</div>
-    <h2>قريبًا — المرحلة الثانية</h2>
-    <p>${tf("هنا سيتم توزيع الحصص تلقائيًا على {0} أيام × {1} حصص بدون تعارض، مع إمكانية التعديل اليدوي.", settings().days.length, settings().periods.length)}</p>
-  </div>
-  <div class="card">
-    <h3>جاهزية البيانات للتوزيع</h3>
-    <div style="display:flex;flex-direction:column;gap:.4rem">
-      <div>${S.teachers.length ? "✅" : "⬜"} ${S.teachers.length} معلم</div>
-      <div>${S.sections.length ? "✅" : "⬜"} ${S.sections.length} شعبة</div>
-      <div>${over ? "⚠️" : "✅"} معلمون تجاوزوا النصاب: ${over}</div>
-      <div>${fullSecs ? "⚠️" : "✅"} ${tf("شعب حصصها أكثر من {0} حصة: {1}", cap, fullSecs)}</div>
+  <div class="page-title"><h1>توزيع الجدول</h1>
+    <div class="row-actions">
+      <span id="ttSave" class="save-state ok">محفوظ</span>
+      <button class="btn" id="ttPrint"><span data-ic="print" data-size="18"></span>طباعة</button>
+      <button class="btn primary" id="ttGen"><span data-ic="magic" data-size="18"></span>توزيع تلقائي</button>
     </div>
-  </div>`;
+  </div>
+
+  <div class="tt-stats">
+    <div><b>${all.length}</b><span>إجمالي الحصص</span></div>
+    <div><b class="okc">${placed}</b><span>موزّعة</span></div>
+    <div><b class="${all.length - placed ? "badc" : ""}">${all.length - placed}</b><span>لم توزّع بعد</span></div>
+    <div><b>${locked}</b><span>مثبتة</span></div>
+  </div>
+  ${overT.length || overC.length ? `<div class="notice bad">${overT.map(([id, n]) => esc(tf("المعلم {0} لديه {1} حصة والأسبوع فيه {2} حصة فقط", teacherOf(id)?.name, n, cap))).join("<br>")}${overT.length && overC.length ? "<br>" : ""}${overC.map(([id, n]) => esc(tf("الشعبة {0} لديها {1} حصة والأسبوع فيه {2} حصة فقط", secLabel(section(id)), n, cap))).join("<br>")}</div>` : ""}
+
+  <div class="card tt-card">
+    <div class="tt-bar">
+      <div class="seg" id="ttMode">
+        <button data-m="teacher" class="${TV.mode === "teacher" ? "active" : ""}">المعلمون</button>
+        <button data-m="section" class="${TV.mode === "section" ? "active" : ""}">الشعب</button>
+      </div>
+      <div class="tt-pick">
+        <button class="icon-btn" id="ttPrev" ${pos <= 0 ? "disabled" : ""}><span data-ic="${isEn ? "chevL" : "chevR"}" data-size="18"></span></button>
+        <select id="ttSel">${ents.map(e => `<option value="${e.id}" ${e.id === TV.id ? "selected" : ""}>${esc(e.name)}${unByEnt.get(e.id) ? ` (${unByEnt.get(e.id)} ${tr("غير موزّعة")})` : ""}</option>`).join("")}</select>
+        <button class="icon-btn" id="ttNext" ${pos >= ents.length - 1 ? "disabled" : ""}><span data-ic="${isEn ? "chevR" : "chevL"}" data-size="18"></span></button>
+      </div>
+    </div>
+    <div id="ttGrid"></div>
+    <div id="ttTray"></div>
+    <p class="muted tt-hint">اضغط على أي حصة ثم اضغط على خانة أخرى لنقلها أو تبديلها. الحصص التي تنقلها يدويًا تُثبّت تلقائيًا ولا يغيّرها التوزيع التلقائي.</p>
+  </div>
+  <div class="sel-bar hidden" id="selBar"></div>`;
+}
+
+function ttGridHTML(mode, id, opts = {}) {
+  const { D, P } = ttDims();
+  const st = settings();
+  const idx = opts.idx || ttIndex();
+  const sel = opts.interactive ? TV.sel : null;
+  const transpose = !!opts.transpose;
+  const cell = (d, p) => {
+    const i = (mode === "teacher" ? idx.tS : idx.cS).get(`${id}@${d}.${p}`);
+    let cls = "tt-cell", inner = "", data = `data-d="${d}" data-p="${p}"`;
+    if (i != null) {
+      const x = TT.lessons[i], sb = subject(x.s);
+      const main = mode === "teacher" ? secLabel(section(x.c)) : (sb?.name || "؟");
+      const sub = mode === "teacher" ? (sb?.name || "") : shortName(teacherOf(x.t)?.name);
+      cls += " has";
+      if (i === sel) cls += " sel";
+      if (x.l) cls += " locked";
+      inner = `<div class="lsn" style="--c:${sb?.color || "#64748b"}"><b>${esc(main)}</b><small>${esc(sub)}</small>${x.l ? `<i class="lk" data-ic="lock" data-size="12"></i>` : ""}</div>`;
+      data += ` data-i="${i}"`;
+    }
+    if (sel != null && i !== sel) {
+      const r = canMove(sel, d, p, idx);
+      cls += r.ok ? " can" : " cant";
+    }
+    return `<td class="${cls}" ${data}>${inner}</td>`;
+  };
+  const pHead = p => `<th class="ph"><b>${p + 1}</b><small>${esc(st.periods[p]?.start || "")}</small></th>`;
+  if (!transpose) {
+    return `<table class="tt"><thead><tr><th></th>${Array.from({ length: P }, (_, p) => pHead(p)).join("")}</tr></thead><tbody>
+      ${st.days.map((dn, d) => `<tr><th class="dh">${esc(dn)}</th>${Array.from({ length: P }, (_, p) => cell(d, p)).join("")}</tr>`).join("")}
+    </tbody></table>`;
+  }
+  return `<table class="tt tr"><thead><tr><th></th>${st.days.map(dn => `<th class="dh" data-no-i18n>${esc(shortDay(dn))}</th>`).join("")}</tr></thead><tbody>
+    ${Array.from({ length: P }, (_, p) => `<tr>${pHead(p)}${st.days.map((_, d) => cell(d, p)).join("")}</tr>`).join("")}
+  </tbody></table>`;
+}
+
+function ttDraw() {
+  const grid = $("ttGrid"); if (!grid || !TV.id) return;
+  const idx = ttIndex();
+  ttOrient = innerWidth < 700;
+  grid.innerHTML = `<div class="tt-wrap">${ttGridHTML(TV.mode, TV.id, { interactive: true, transpose: ttOrient, idx })}</div>`;
+  // الحصص غير الموزعة
+  const un = TT.lessons.map((x, i) => [x, i]).filter(([x]) => x.d == null && (TV.mode === "teacher" ? x.t : x.c) === TV.id);
+  $("ttTray").innerHTML = un.length ? `<div class="tray"><b>حصص غير موزّعة:</b> ${un.map(([x, i]) => {
+    const sb = subject(x.s);
+    const label = TV.mode === "teacher" ? secLabel(section(x.c)) : (sb?.name || "");
+    return `<button class="tray-chip ${TV.sel === i ? "sel" : ""}" data-i="${i}" style="--c:${sb?.color || "#64748b"}">${esc(label)} <small>${esc(TV.mode === "teacher" ? sb?.name || "" : shortName(teacherOf(x.t)?.name))}</small></button>`;
+  }).join("")}</div>` : "";
+  // شريط الحصة المحددة
+  const bar = $("selBar");
+  document.body.classList.toggle("has-sel", TV.sel != null);
+  if (TV.sel != null) {
+    const x = TT.lessons[TV.sel], sb = subject(x.s);
+    bar.classList.remove("hidden");
+    bar.innerHTML = `<div class="sb-info"><span class="dot" style="background:${sb?.color}"></span><b>${esc(sb?.name || "")}</b> · ${esc(secLabel(section(x.c)))} · ${esc(shortName(teacherOf(x.t)?.name))}<div class="muted sb-hint">اختر خانة خضراء لنقل الحصة</div></div>
+      <div class="row-actions">
+        ${x.d != null ? `<button class="btn sm" data-sa="lock">${x.l ? "إلغاء التثبيت" : "تثبيت"}</button><button class="btn sm" data-sa="remove">إزالة من الجدول</button>` : ""}
+        <button class="btn sm ghost" data-sa="cancel">إلغاء</button>
+      </div>`;
+  } else { bar.classList.add("hidden"); bar.innerHTML = ""; }
+  fillIcons(document.getElementById("view"));
+  ttStatus();
+}
+
+BIND.timetable = v => {
+  if (!TT.lessons?.length) return;
+  fillIcons(v);
+  ttDraw();
+  $("ttMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; TV.mode = b.dataset.m; TV.id = null; TV.sel = null; render(); };
+  $("ttSel").onchange = e => { TV.id = e.target.value; TV.sel = null; render(); };
+  const step = k => { const o = [...$("ttSel").options]; const i = o.findIndex(x => x.selected) + k; if (o[i]) { TV.id = o[i].value; TV.sel = null; render(); } };
+  $("ttPrev").onclick = () => step(-1);
+  $("ttNext").onclick = () => step(1);
+  $("ttGen").onclick = ttGenerate;
+  $("ttPrint").onclick = ttPrintMenu;
+
+  v.onclick = async e => {
+    const chip = e.target.closest(".tray-chip");
+    if (chip) { const i = +chip.dataset.i; TV.sel = TV.sel === i ? null : i; return ttDraw(); }
+    const sa = e.target.closest("[data-sa]");
+    if (sa && TV.sel != null) {
+      const x = TT.lessons[TV.sel];
+      if (sa.dataset.sa === "lock") { x.l = !x.l; ttMark(); }
+      if (sa.dataset.sa === "remove") { x.d = x.p = null; x.l = false; ttMark(); }
+      TV.sel = null; return render();
+    }
+    const td = e.target.closest("td.tt-cell"); if (!td) return;
+    const d = +td.dataset.d, p = +td.dataset.p, i = td.dataset.i != null ? +td.dataset.i : null;
+    if (TV.sel == null) { if (i != null) { TV.sel = i; ttDraw(); } return; }
+    if (i === TV.sel) { TV.sel = null; return ttDraw(); }
+    const r = canMove(TV.sel, d, p, ttIndex());
+    if (!r.ok) {
+      if (i != null) { TV.sel = i; return ttDraw(); }
+      if (r.reason) toast(r.reason, "error");
+      return;
+    }
+    const L = TT.lessons[TV.sel];
+    if (r.swap != null) { const J = TT.lessons[r.swap]; J.d = L.d; J.p = L.p; }
+    L.d = d; L.p = p; L.l = true;
+    TV.sel = null; ttMark(); render();
+  };
+};
+
+window.addEventListener("resize", () => {
+  if (location.hash === "#timetable" && ttOrient !== null && (innerWidth < 700) !== ttOrient) ttDraw();
+});
+
+async function ttGenerate() {
+  const placed = TT.lessons.filter(x => x.d != null && !x.l).length;
+  if (placed && !(await confirmBox(tf("سيتم إعادة توزيع كل الحصص غير المثبتة. هل تريد المتابعة؟"), "توزيع", false))) return;
+  const { D, P } = ttDims();
+  openModal(`<div class="gen-box"><div class="spinner"></div><h3>جارٍ توزيع الحصص</h3><div class="progress"><i id="genBar"></i></div><p class="muted" id="genTxt"></p></div>`);
+  $("modalBack").dataset.lock = "1";
+  const input = TT.lessons.map(x => x.l ? x : { ...x, d: null, p: null });
+  const r = await schedule({
+    D, P, lessons: input, timeBudget: 5000, maxTries: 120,
+    onProgress: pr => {
+      const b = $("genBar"); if (b) b.style.width = Math.min(100, Math.max(pr.tries / pr.maxTries, pr.elapsed / 5000) * 100) + "%";
+      const tx = $("genTxt"); if (tx) tx.textContent = tf("محاولة {0} — غير موزّعة: {1}", pr.tries, pr.unplaced);
+    }
+  });
+  delete $("modalBack").dataset.lock;
+  TT.lessons = r.lessons;
+  TV.sel = null;
+  ttMark();
+  closeModal();
+  render();
+  if (r.unplaced) toast(tf("تم التوزيع، وبقيت {0} حصة بدون مكان. راجعها في قائمة غير الموزّعة.", r.unplaced), "error");
+  else toast(tf("تم توزيع {0} حصة بدون تعارض ✅", r.lessons.length), "success");
+}
+
+// ---------- الطباعة ----------
+function ttPrintMenu() {
+  openModal(`${modalHead(tr("طباعة"))}
+    <div class="print-opts">
+      <button class="btn block" data-pr="one">طباعة الجدول المعروض</button>
+      <button class="btn block" data-pr="teachers">طباعة جداول كل المعلمين</button>
+      <button class="btn block" data-pr="sections">طباعة جداول كل الشعب</button>
+    </div>
+    <p class="muted" style="margin-bottom:0">للحفظ كملف PDF اختر «حفظ بتنسيق PDF» من نافذة الطباعة.</p>`);
+  $("modal").onclick = e => {
+    const b = e.target.closest("[data-pr]"); if (!b) return;
+    closeModal(); $("modal").onclick = null;
+    ttPrint(b.dataset.pr);
+  };
+}
+function ttPrint(kind) {
+  const idx = ttIndex();
+  const blocks = [];
+  const add = (mode, id, title) => blocks.push(`<div class="pblock"><div class="ph-head"><b>${esc(title)}</b><span>${esc(S.school.name)}</span></div>${ttGridHTML(mode, id, { idx })}</div>`);
+  const tLoad = new Set(TT.lessons.map(x => x.t)), cLoad = new Set(TT.lessons.map(x => x.c));
+  if (kind === "one") add(TV.mode, TV.id, TV.mode === "teacher" ? teacherOf(TV.id)?.name : tf("الشعبة {0}", secLabel(section(TV.id))));
+  if (kind === "teachers") S.teachers.filter(t => tLoad.has(t.id)).forEach(t => add("teacher", t.id, t.name));
+  if (kind === "sections") S.sections.filter(s => cLoad.has(s.id)).forEach(s => add("section", s.id, tf("الشعبة {0}", secLabel(s))));
+  const per = kind === "one" ? 1 : 4;
+  let html = "";
+  for (let i = 0; i < blocks.length; i += per) html += `<div class="ppage ${per === 4 ? "four" : ""}">${blocks.slice(i, i + per).join("")}</div>`;
+  let pa = $("printArea");
+  if (!pa) { pa = document.createElement("div"); pa.id = "printArea"; document.body.appendChild(pa); }
+  pa.innerHTML = html;
+  setTimeout(() => window.print(), 300);
 }
 
 // ---------- التحقق من الدخول ----------

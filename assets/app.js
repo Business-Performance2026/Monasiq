@@ -132,6 +132,11 @@ const P = {
   logout: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5M5 12h11"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   schools: '<path d="M3 21h18M5 21V10l7-5 7 5v11"/><path d="M10 21v-5h4v5M9 11h.01M15 11h.01"/>',
+  print: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+  magic: '<path d="m4 20 11-11M14 4l1.2 2.8L18 8l-2.8 1.2L14 12l-1.2-2.8L10 8l2.8-1.2zM19 13l.7 1.6 1.6.7-1.6.7L19 17.6l-.7-1.6-1.6-.7 1.6-.7zM6 3l.6 1.4L8 5l-1.4.6L6 7l-.6-1.4L4 5l1.4-.6z"/>',
+  chevL: '<path d="m15 5-7 7 7 7"/>',
+  chevR: '<path d="m9 5 7 7-7 7"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   web: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/>'
 };
 export function icon(name, size = 22) {

@@ -164,4 +164,27 @@ export const EN = {
   "هنا سيتم توزيع الحصص تلقائيًا على {0} أيام × {1} حصص بدون تعارض، مع إمكانية التعديل اليدوي.": "Periods will be distributed here automatically over {0} days × {1} periods without conflicts, with manual editing.",
   "جاهزية البيانات للتوزيع": "Data readiness for scheduling", "معلمون تجاوزوا النصاب": "Teachers over their load",
   "شعب حصصها أكثر من {0} حصة: {1}": "Sections with more than {0} periods: {1}"
+
+  // توزيع الجدول
+  ,"الجدول": "Timetable", "غير موزّعة": "unplaced", "محفوظ": "Saved", "جارٍ الحفظ": "Saving",
+  "طباعة": "Print", "توزيع تلقائي": "Auto-schedule", "توزيع": "Schedule", "إجمالي الحصص": "Total periods", "موزّعة": "Placed", "مثبتة": "Locked",
+  "لم توزّع بعد": "Unplaced", "حصص غير موزّعة:": "Unplaced periods:", "حصص غير موزّعة": "Unplaced periods",
+  "اضغط على أي حصة ثم اضغط على خانة أخرى لنقلها أو تبديلها. الحصص التي تنقلها يدويًا تُثبّت تلقائيًا ولا يغيّرها التوزيع التلقائي.": "Tap any period, then tap another slot to move or swap it. Periods you move manually are locked automatically and won't be changed by auto-scheduling.",
+  "جارٍ توزيع الحصص": "Scheduling periods", "محاولة {0} — غير موزّعة: {1}": "Attempt {0} — unplaced: {1}",
+  "تم توزيع {0} حصة بدون تعارض ✅": "{0} periods scheduled with no conflicts ✅",
+  "تم التوزيع، وبقيت {0} حصة بدون مكان. راجعها في قائمة غير الموزّعة.": "Scheduling done, but {0} periods couldn't be placed. Check the unplaced list.",
+  "سيتم إعادة توزيع كل الحصص غير المثبتة. هل تريد المتابعة؟": "All unlocked periods will be rescheduled. Continue?",
+  "اختر خانة خضراء لنقل الحصة": "Choose a green slot to move this period",
+  "تثبيت": "Lock", "إلغاء التثبيت": "Unlock", "إزالة من الجدول": "Remove from timetable",
+  "طباعة الجدول المعروض": "Print the current timetable", "طباعة جداول كل المعلمين": "Print all teacher timetables", "طباعة جداول كل الشعب": "Print all section timetables",
+  "للحفظ كملف PDF اختر «حفظ بتنسيق PDF» من نافذة الطباعة.": "To save as PDF, choose “Save as PDF” in the print dialog.",
+  "الشعبة {0}": "Section {0}",
+  "لا توجد حصص لتوزيعها": "No periods to schedule",
+  "أضف المعلمين وأسند لهم الشعب أولًا، ثم ارجع هنا للتوزيع.": "Add teachers and assign their sections first, then come back here to schedule.",
+  "المعلم والشعبة كلاهما مشغولان في هذا الوقت": "Both the teacher and the section are busy at this time",
+  "الخانة فيها حصة مثبتة": "This slot has a locked period",
+  "المعلم لديه حصة مع {0} في هذا الوقت": "The teacher has a period with {0} at this time",
+  "الشعبة {0} لديها حصة {1} في هذا الوقت": "Section {0} has {1} at this time",
+  "المعلم {0} لديه {1} حصة والأسبوع فيه {2} حصة فقط": "Teacher {0} has {1} periods but the week has only {2}",
+  "الشعبة {0} لديها {1} حصة والأسبوع فيه {2} حصة فقط": "Section {0} has {1} periods but the week has only {2}"
 };
