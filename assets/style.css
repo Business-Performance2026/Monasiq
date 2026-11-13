@@ -79,7 +79,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary-2); box-
 /* Tables */
 .table-wrap { overflow-x: auto; }
 table.tbl { width: 100%; border-collapse: collapse; font-size: .95rem; }
-.tbl th, .tbl td { padding: .65em .75em; border-bottom: 1px solid var(--line); text-align: right; vertical-align: middle; }
+.tbl th, .tbl td { padding: .65em .75em; border-bottom: 1px solid var(--line); text-align: start; vertical-align: middle; }
 .tbl th { background: #f8fafc; color: var(--muted); font-weight: 700; font-size: .85rem; white-space: nowrap; }
 .tbl tr:last-child td { border-bottom: 0; }
 
@@ -126,7 +126,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: .95rem; }
 
 .mock { background: #fff; border-radius: 18px; box-shadow: 0 24px 60px rgba(15,118,110,.18); padding: 1rem; border: 1px solid var(--line); }
 .mock-title { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: .6rem; font-size: .95rem; }
-.mock-grid { display: grid; grid-template-columns: 60px repeat(6, 1fr); gap: 4px; font-size: .72rem; }
+.mock-grid { display: grid; grid-template-columns: 74px repeat(6, 1fr); gap: 4px; font-size: .72rem; }
 .mock-grid div { background: #f1f5f9; border-radius: 6px; min-height: 34px; display: grid; place-items: center; text-align: center; padding: 2px; }
 .mock-grid .h { background: transparent; color: var(--muted); font-weight: 700; }
 .mock-grid .c1 { background: #ccfbf1; color: #115e59; } .mock-grid .c2 { background: #e0e7ff; color: #3730a3; }
@@ -150,7 +150,7 @@ section.block.alt { background: #fff; border-block: 1px solid var(--line); }
 @media (max-width: 860px) { .steps { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .steps { grid-template-columns: 1fr; } }
 .step { position: relative; background: var(--bg); border-radius: var(--radius); padding: 1.5rem 1.3rem 1.3rem; border: 1px solid var(--line); }
-.step::before { counter-increment: s; content: counter(s); position: absolute; top: -16px; right: 1.2rem; width: 36px; height: 36px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 800; display: grid; place-items: center; }
+.step::before { counter-increment: s; content: counter(s); position: absolute; top: -16px; inset-inline-start: 1.2rem; width: 36px; height: 36px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 800; display: grid; place-items: center; }
 .step h3 { font-size: 1.08rem; margin-top: .4rem; }
 .step p { color: var(--muted); margin: 0; font-size: .95rem; }
 
@@ -200,6 +200,7 @@ footer.site { padding: 2rem 0; text-align: center; color: var(--muted); font-siz
 @media (max-width: 900px) {
   .app { grid-template-columns: 1fr; }
   .side { position: fixed; inset: 0 0 0 auto; width: 260px; transform: translateX(105%); transition: .25s; z-index: 300; }
+  [dir=ltr] .side { inset: 0 auto 0 0; transform: translateX(-105%); }
   .side.open { transform: none; box-shadow: -10px 0 40px rgba(0,0,0,.3); }
   .topbar { display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid var(--line); padding: .6rem 1rem; position: sticky; top: 0; z-index: 100; }
   .topbar .logo { font-size: 1.2rem; }
@@ -242,3 +243,13 @@ footer.site { padding: 2rem 0; text-align: center; color: var(--muted); font-siz
 .school-card { display: grid; grid-template-columns: 1fr auto; gap: .8rem; align-items: start; }
 .school-card .meta { display: flex; flex-wrap: wrap; gap: .3rem 1.2rem; color: var(--muted); font-size: .92rem; }
 @media (max-width: 640px) { .school-card { grid-template-columns: 1fr; } }
+
+/* Language toggle */
+.lang-btn { display: inline-flex; align-items: center; gap: .35em; border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 99px; padding: .35em .85em; font: inherit; font-weight: 700; font-size: .88rem; cursor: pointer; white-space: nowrap; }
+.lang-btn:hover { border-color: var(--primary-2); color: var(--primary); }
+.lang-btn::before { content: "🌐"; }
+.side .lang-btn { background: rgba(255,255,255,.08); color: #fff; border-color: rgba(255,255,255,.15); margin-top: auto; justify-content: center; }
+.side .lang-btn + .logout { margin-top: .5rem; }
+.auth-lang { position: fixed; top: 1rem; inset-inline-end: 1rem; z-index: 60; }
+.topbar .tb-actions { display: flex; gap: .5rem; align-items: center; }
+html.i18n-pending body { visibility: hidden; }

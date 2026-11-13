@@ -1,5 +1,5 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods } from "./app.js";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr } from "./app.js";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -118,7 +118,7 @@ function vOverview() {
   }).join("");
 
   return `
-  <div class="page-title"><h1>أهلًا، ${esc(S.school.principal || S.school.name)} 👋</h1></div>
+  <div class="page-title"><h1>${esc(tf("أهلًا، {0}", S.school.principal || S.school.name))} 👋</h1></div>
   <div class="stats">
     <div class="stat"><div class="n">${S.teachers.length}</div><div class="l">معلم</div></div>
     <div class="stat"><div class="n">${S.sections.length}</div><div class="l">شعبة</div></div>
@@ -130,7 +130,7 @@ function vOverview() {
       <span class="badge ${s[0] ? "ok" : "warn"}">${s[0] ? "✔" : i + 1}</span>
       <a href="${s[1]}">${s[2]}</a></div>`).join("")}</div>` : ""}
   <div class="card">
-    <div class="card-head"><h3>نصاب المعلمين</h3><span class="muted">${settings().days.length} أيام × ${settings().periods.length} حصص = ${cap} حصة أسبوعيًا لكل شعبة</span></div>
+    <div class="card-head"><h3>نصاب المعلمين</h3><span class="muted">${tf("{0} أيام × {1} حصص = {2} حصة أسبوعيًا لكل شعبة", settings().days.length, settings().periods.length, cap)}</span></div>
     ${S.teachers.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>المعلم</th><th>المادة</th><th>النصاب</th><th>الحالة</th></tr></thead><tbody>${tRows}</tbody></table></div>` : `<div class="empty">لم يتم إضافة معلمين بعد</div>`}
   </div>
   <div class="card">
@@ -281,11 +281,11 @@ BIND.grades = v => {
         await addDoc(col("sections"), { gradeId: gid, num: String(next) });
       } else if (act === "delSec") {
         const s = section(b.dataset.s);
-        if (!(await confirmBox(`حذف الشعبة ${secLabel(s)}؟ سيتم حذف إسنادها من المعلمين.`, "حذف"))) return;
+        if (!(await confirmBox(tf("حذف الشعبة {0}؟ سيتم حذف إسنادها من المعلمين.", secLabel(s)), "حذف"))) return;
         await removeSections([s.id]);
         toast("تم حذف الشعبة", "success");
       } else if (act === "delGrade") {
-        if (!(await confirmBox(`حذف صف «${g.name}» وكل شعبه؟`, "حذف"))) return;
+        if (!(await confirmBox(tf("حذف صف «{0}» وكل شعبه؟", g.name), "حذف"))) return;
         await removeSections(S.sections.filter(s => s.gradeId === gid).map(s => s.id), gid);
         toast("تم حذف الصف", "success");
       } else if (act === "editGrade") {
@@ -373,7 +373,7 @@ BIND.subjects = v => {
     const b = e.target.closest("[data-act]"); if (!b) return;
     const s = subject(b.closest("[data-id]").dataset.id);
     if (b.dataset.act === "edit") return subjectModal(s);
-    if (!(await confirmBox(`حذف مادة «${s.name}»؟ سيتم حذف إسنادها من المعلمين.`, "حذف"))) return;
+    if (!(await confirmBox(tf("حذف مادة «{0}»؟ سيتم حذف إسنادها من المعلمين.", s.name), "حذف"))) return;
     try {
       const batch = writeBatch(db);
       batch.delete(dref("subjects", s.id));
@@ -406,7 +406,7 @@ function drawTeachers() {
   $("tList").innerHTML = rows.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>المعلم</th><th>المادة</th><th>الشعب المُسندة</th><th>النصاب</th><th></th></tr></thead><tbody>
     ${rows.map(t => {
       const l = load(t), max = num(t.maxLoad);
-      return `<tr data-id="${t.id}"><td><b>${esc(t.name)}</b>${t.phone ? `<div class="muted" dir="ltr" style="font-size:.82rem;text-align:right">${esc(t.phone)}</div>` : ""}</td>
+      return `<tr data-id="${t.id}"><td><b>${esc(t.name)}</b>${t.phone ? `<div class="muted" style="font-size:.82rem"><span dir="ltr">${esc(t.phone)}</span></div>` : ""}</td>
       <td>${esc(subject(t.subjectId)?.name || "—")}</td>
       <td style="max-width:380px">${(t.assignments || []).map(a => { const sb = subject(a.subjectId);
         return `<span class="chip" title="${esc(sb?.name || "")}"><span class="dot" style="background:${sb?.color || "#999"}"></span>${esc(secLabel(section(a.sectionId)))} <b>${num(a.periods)}</b></span>`; }).join("") || "<span class='muted'>—</span>"}</td>
@@ -423,7 +423,7 @@ BIND.teachers = () => {
     const b = e.target.closest("[data-act]"); if (!b) return;
     const t = S.teachers.find(x => x.id === b.closest("[data-id]").dataset.id);
     if (b.dataset.act === "edit") return teacherModal(t);
-    if (!(await confirmBox(`حذف المعلم «${t.name}»؟`, "حذف"))) return;
+    if (!(await confirmBox(tf("حذف المعلم «{0}»؟", t.name), "حذف"))) return;
     try { await deleteDoc(dref("teachers", t.id)); toast("تم الحذف", "success"); } catch (ex) { toast(errMsg(ex), "error"); }
   };
 };
@@ -471,7 +471,7 @@ function teacherModal(t) {
         <div><b>${esc(secLabel(sec))}</b></div>
         <input type="number" min="1" max="20" value="${num(a.periods)}" data-i="${i}" title="عدد الحصص أسبوعيًا">
         <button type="button" class="btn sm danger" data-rm="${i}">×</button>
-        ${others.length ? `<div class="warn-t">⚠ هذه المادة في هذه الشعبة مُسندة أيضًا إلى: ${esc(others.join("، "))}</div>` : ""}
+        ${others.length ? `<div class="warn-t">⚠ ${esc(tf("هذه المادة في هذه الشعبة مُسندة أيضًا إلى: {0}", others.join("، ")))}</div>` : ""}
       </div>`;
     }).join("") : `<p class="muted" style="margin:.3rem 0 0">اختر المادة ثم حدّد الشعب واضغط «إسناد».</p>`;
     $("tTotal").textContent = asg.reduce((x, a) => x + num(a.periods), 0);
@@ -527,7 +527,7 @@ function vTimetable() {
   <div class="card empty">
     <div class="big">🧩</div>
     <h2>قريبًا — المرحلة الثانية</h2>
-    <p>هنا سيتم توزيع الحصص تلقائيًا على ${settings().days.length} أيام × ${settings().periods.length} حصص بدون تعارض، مع إمكانية التعديل اليدوي.</p>
+    <p>${tf("هنا سيتم توزيع الحصص تلقائيًا على {0} أيام × {1} حصص بدون تعارض، مع إمكانية التعديل اليدوي.", settings().days.length, settings().periods.length)}</p>
   </div>
   <div class="card">
     <h3>جاهزية البيانات للتوزيع</h3>
@@ -535,7 +535,7 @@ function vTimetable() {
       <div>${S.teachers.length ? "✅" : "⬜"} ${S.teachers.length} معلم</div>
       <div>${S.sections.length ? "✅" : "⬜"} ${S.sections.length} شعبة</div>
       <div>${over ? "⚠️" : "✅"} معلمون تجاوزوا النصاب: ${over}</div>
-      <div>${fullSecs ? "⚠️" : "✅"} شعب حصصها أكثر من ${cap} حصة: ${fullSecs}</div>
+      <div>${fullSecs ? "⚠️" : "✅"} ${tf("شعب حصصها أكثر من {0} حصة: {1}", cap, fullSecs)}</div>
     </div>
   </div>`;
 }

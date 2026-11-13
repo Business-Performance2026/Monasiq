@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>مُنسِّق | منصة توزيع جدول الحصص للمدارس</title>
   <meta name="description" content="منصة سحابية لتوزيع جدول الحصص على المعلمين والشعب بسهولة، تعمل على الكمبيوتر والجوال.">
+  <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -19,6 +20,7 @@
       <a href="#faq">أسئلة شائعة</a>
     </nav>
     <div class="nav-cta">
+      <button class="lang-btn" data-lang-toggle></button>
       <a href="login.html" class="btn ghost">تسجيل الدخول</a>
       <a href="register.html" class="btn primary">سجّل مدرستك</a>
     </div>
@@ -37,7 +39,7 @@
       </div>
     </div>
     <div class="mock" aria-hidden="true">
-      <div class="mock-title"><span>جدول المعلم: عمار — فيزياء</span><span class="muted">20 حصة</span></div>
+      <div class="mock-title"><span>جدول المعلم</span></div>
       <div class="mock-grid">
         <div class="h"></div><div class="h">1</div><div class="h">2</div><div class="h">3</div><div class="h">4</div><div class="h">5</div><div class="h">6</div>
         <div class="h">الأحد</div><div class="c1">5/12</div><div></div><div class="c2">4/10</div><div class="c1">3/12</div><div></div><div class="c3">3/10</div>
@@ -58,7 +60,7 @@
     </div>
     <div class="features">
       <div class="feature"><div class="ic">🏫</div><h3>لوحة خاصة لكل مدرسة</h3><p>بيانات مدرستك محفوظة في مساحة خاصة بها، ولا تستطيع أي مدرسة أخرى الاطلاع عليها.</p></div>
-      <div class="feature"><div class="ic">👩‍🏫</div><h3>إدارة المعلمين والنصاب</h3><p>أضف المعلمين وحدّد المادة والشعب التي يدرّسها كل معلم ونصابه الأسبوعي من الحصص.</p></div>
+      <div class="feature"><div class="ic">👩‍🏫</div><h3>إدارة المعلمين وتوزيع الحصص</h3><p>أضف المعلمين وحدّد المادة والشعب التي يدرّسها كل معلم ونصابه الأسبوعي من الحصص.</p></div>
       <div class="feature"><div class="ic">📚</div><h3>صفوف وشعب ومواد</h3><p>أنشئ الصفوف والشعب والمواد، وحدّد عدد حصص كل مادة لكل صف أسبوعيًا.</p></div>
       <div class="feature"><div class="ic">⚙️</div><h3>إعدادات مرنة</h3><p>اختر أيام الدوام وعدد الحصص في اليوم وأوقات بداية ونهاية كل حصة.</p></div>
       <div class="feature"><div class="ic">🧩</div><h3>توزيع بدون تعارض</h3><p>توزيع الحصص على أيام الأسبوع بحيث لا يكون المعلم في حصتين في الوقت نفسه، ولا الشعبة كذلك.</p></div>
@@ -87,7 +89,6 @@
     <div class="section-title"><h2>أسئلة شائعة</h2></div>
     <div class="faq">
       <details><summary>هل تعمل المنصة على الجوال؟</summary><p>نعم، تعمل من أي متصفح على الكمبيوتر أو الجوال أو الآيباد بدون تثبيت أي برنامج.</p></details>
-      <details><summary>هل يمكن للمدارس الأخرى رؤية بيانات مدرستي؟</summary><p>لا. كل مدرسة لها مساحة بيانات خاصة محمية، ولا يصل إليها إلا حساب المدرسة وإدارة المنصة.</p></details>
       <details><summary>لماذا يحتاج التسجيل إلى موافقة؟</summary><p>للتأكد من أن الحساب يعود لمدرسة حقيقية وحماية المنصة من الحسابات الوهمية.</p></details>
       <details><summary>هل يمكن تغيير عدد الحصص اليومية وأيام الدوام؟</summary><p>نعم، كل مدرسة تحدد عدد الحصص وأوقاتها وأيام الدوام من صفحة الإعدادات.</p></details>
       <details><summary>نسيت كلمة المرور، ماذا أفعل؟</summary><p>من صفحة تسجيل الدخول اضغط «نسيت كلمة المرور» وسيصلك رابط لإعادة تعيينها على بريدك.</p></details>
@@ -114,14 +115,18 @@
 
 <script type="module">
   import { APP } from "./assets/config.js";
-  document.querySelectorAll("[data-app-name]").forEach(e => e.textContent = APP.name);
-  document.querySelectorAll("[data-app-tagline]").forEach(e => e.textContent = APP.tagline);
-  document.title = `${APP.name} | ${APP.tagline}`;
+  import { initI18n, isEn, tr } from "./assets/i18n.js";
+  const name = isEn ? (APP.nameEn || APP.name) : APP.name;
+  const tag = isEn ? (APP.taglineEn || APP.tagline) : APP.tagline;
+  document.querySelectorAll("[data-app-name]").forEach(e => { e.textContent = name; e.setAttribute("data-no-i18n", ""); });
+  document.querySelectorAll("[data-app-tagline]").forEach(e => { e.textContent = tag; e.setAttribute("data-no-i18n", ""); });
   document.getElementById("yr").textContent = new Date().getFullYear();
   const c = document.getElementById("contact");
   if (APP.contactPhone) c.insertAdjacentHTML("beforeend", `<a href="tel:${APP.contactPhone}">📞 <span dir="ltr">${APP.contactPhone}</span></a>`);
   if (APP.whatsapp) c.insertAdjacentHTML("beforeend", `<a href="https://wa.me/${APP.whatsapp}" target="_blank" rel="noopener">💬 واتساب</a>`);
   if (APP.contactEmail) c.insertAdjacentHTML("beforeend", `<a href="mailto:${APP.contactEmail}">✉️ ${APP.contactEmail}</a>`);
+  initI18n();
+  document.title = `${name} | ${tag}`;
 </script>
 </body>
 </html>

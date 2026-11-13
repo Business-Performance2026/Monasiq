@@ -5,7 +5,9 @@
 // 1) بيانات المنصة (الاسم ووسائل التواصل التي تظهر في الصفحة الرئيسية)
 export const APP = {
   name: "مُنسِّق",
+  nameEn: "Monasiq",                 // الاسم في النسخة الإنجليزية
   tagline: "منصة توزيع جدول الحصص للمدارس",
+  taglineEn: "School Timetable Distribution Platform",
   contactPhone: "",   // مثال: "+96890000000" — اتركه فارغًا لإخفائه
   contactEmail: "",   // مثال: "info@example.com" — اتركه فارغًا لإخفائه
   whatsapp: ""        // رقم واتساب بدون + مثال: "96890000000"

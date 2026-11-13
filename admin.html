@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>إدارة المنصة | {app}</title>
+  <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -17,6 +18,7 @@
       <a href="#" class="active">🏫 المدارس</a>
       <a href="index.html" target="_blank">🌐 الصفحة الرئيسية</a>
     </nav>
+    <button class="lang-btn" data-lang-toggle></button>
     <button class="btn logout" id="logoutBtn">تسجيل الخروج</button>
   </aside>
   <div class="side-shade" id="shade"></div>
@@ -24,7 +26,7 @@
   <div>
     <div class="topbar">
       <div class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></div>
-      <button class="menu-btn" id="menuBtn">☰</button>
+      <div class="tb-actions"><button class="lang-btn" data-lang-toggle></button><button class="menu-btn" id="menuBtn">☰</button></div>
     </div>
     <main class="main">
       <div class="page-title"><h1>إدارة المدارس</h1></div>
@@ -54,7 +56,7 @@
 </div>
 
 <script type="module">
-  import { auth, db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg } from "./assets/app.js";
+  import { auth, db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, lang } from "./assets/app.js";
   import { collection, onSnapshot, doc, updateDoc, deleteDoc, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   applyBranding();
 
@@ -101,7 +103,7 @@
 
       list.innerHTML = rows.map(s => {
         const st = STATUS[s.status] || { label: s.status, cls: "info" };
-        const date = s.createdAt?.toDate ? s.createdAt.toDate().toLocaleDateString("ar-OM") : "";
+        const date = s.createdAt?.toDate ? s.createdAt.toDate().toLocaleDateString(lang === "en" ? "en-GB" : "ar-OM") : "";
         const acts = [];
         if (s.status === "pending") acts.push(`<button class="btn sm success" data-a="active">✔ موافقة</button><button class="btn sm warn" data-a="rejected">رفض</button>`);
         if (s.status === "active") acts.push(`<button class="btn sm warn" data-a="suspended">إيقاف</button>`);
@@ -131,7 +133,7 @@
       const a = b.dataset.a;
       try {
         if (a === "delete") {
-          if (!(await confirmBox(`حذف مدرسة «${s.name}» وكل بياناتها نهائيًا؟`, "حذف نهائي"))) return;
+          if (!(await confirmBox(t("حذف مدرسة «{0}» وكل بياناتها نهائيًا؟", s.name), "حذف نهائي"))) return;
           for (const sub of ["grades", "sections", "subjects", "teachers", "timetable"]) {
             const docs = (await getDocs(collection(db, "schools", id, sub))).docs;
             for (let i = 0; i < docs.length; i += 400) {
@@ -145,7 +147,7 @@
           return;
         }
         const labels = { active: "تفعيل", suspended: "إيقاف", rejected: "رفض" };
-        if (a !== "active" && !(await confirmBox(`${labels[a]} مدرسة «${s.name}»؟`, labels[a]))) return;
+        if (a !== "active" && !(await confirmBox(t({ active: "تفعيل مدرسة «{0}»؟", suspended: "إيقاف مدرسة «{0}»؟", rejected: "رفض مدرسة «{0}»؟" }[a], s.name), labels[a]))) return;
         await updateDoc(doc(db, "schools", id), { status: a, statusAt: serverTimestamp() });
         toast(a === "active" ? "تم تفعيل المدرسة ✅" : "تم التحديث", "success");
       } catch (ex) { toast(errMsg(ex), "error"); }

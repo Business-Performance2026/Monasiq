@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>لوحة المدرسة | {app}</title>
+  <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -21,6 +22,7 @@
       <a href="#teachers" data-v="teachers">👩‍🏫 المعلمون</a>
       <a href="#timetable" data-v="timetable">🗓️ توزيع الجدول <span class="soon">قريبًا</span></a>
     </nav>
+    <button class="lang-btn" data-lang-toggle></button>
     <button class="btn logout" id="logoutBtn">تسجيل الخروج</button>
   </aside>
   <div class="side-shade" id="shade"></div>
@@ -28,7 +30,7 @@
   <div>
     <div class="topbar">
       <div class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></div>
-      <button class="menu-btn" id="menuBtn">☰</button>
+      <div class="tb-actions"><button class="lang-btn" data-lang-toggle></button><button class="menu-btn" id="menuBtn">☰</button></div>
     </div>
     <main class="main" id="view"></main>
   </div>

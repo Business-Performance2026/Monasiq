@@ -3,6 +3,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, APP } from "./config.js";
+import { initI18n, isEn, tr, t, lang } from "./i18n.js";
+export { tr, t, isEn, lang };
+export const APP_NAME = isEn ? (APP.nameEn || APP.name) : APP.name;
+export const APP_TAGLINE = isEn ? (APP.taglineEn || APP.tagline) : APP.tagline;
 
 export { APP };
 export const configured = !String(firebaseConfig.apiKey).startsWith("PASTE");
@@ -13,15 +17,17 @@ export const db = getFirestore(app);
 export const DAYS_ALL = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
 export function applyBranding() {
-  document.querySelectorAll("[data-app-name]").forEach(e => (e.textContent = APP.name));
-  document.querySelectorAll("[data-app-tagline]").forEach(e => (e.textContent = APP.tagline));
-  if (document.title.includes("{app}")) document.title = document.title.replace("{app}", APP.name);
+  document.querySelectorAll("[data-app-name]").forEach(e => { e.textContent = APP_NAME; e.setAttribute("data-no-i18n", ""); });
+  document.querySelectorAll("[data-app-tagline]").forEach(e => { e.textContent = APP_TAGLINE; e.setAttribute("data-no-i18n", ""); });
+  const parts = document.title.split("|").map(x => x.trim());
+  document.title = parts.length > 1 ? `${tr(parts[0])} | ${APP_NAME}` : APP_NAME;
   if (!configured) {
     const b = document.createElement("div");
     b.className = "config-banner";
     b.textContent = "تنبيه: لم يتم ربط Firebase بعد. ضع إعدادات مشروعك في الملف assets/config.js";
     document.body.prepend(b);
   }
+  initI18n();
 }
 
 export function esc(s) {
