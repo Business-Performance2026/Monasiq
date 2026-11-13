@@ -73,7 +73,7 @@
     fillIcons();
     document.querySelectorAll("[data-logout]").forEach(b => (b.onclick = logout));
 
-    let schools = [], filter = "pending", q = "", pub = null;
+    let schools = [], filter = "pending", q = "", pub = null, syncWarned = false;
     onSnapshot(collection(db, "schools"), snap => {
       schools = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -81,7 +81,7 @@
     }, e => toast(errMsg(e), "error"));
     onSnapshot(collection(db, "publicSchools"), snap => {
       pub = new Map(snap.docs.map(d => [d.id, d.data()])); syncPublic();
-    }, () => {});
+    }, () => { pub = new Map(); syncPublic(); });
     // قائمة المدارس المفعّلة التي يختار منها المعلم عند التسجيل
     async function syncPublic() {
       if (!pub || !schools.length) return;
@@ -92,7 +92,7 @@
             if (!p || p.name !== s.name || (p.region || "") !== (s.region || "") || (p.wilayah || "") !== (s.wilayah || ""))
               await setDoc(doc(db, "publicSchools", s.id), { name: s.name, region: s.region || "", wilayah: s.wilayah || "" });
           } else if (p) await deleteDoc(doc(db, "publicSchools", s.id));
-        } catch (e) { /* تُعاد المحاولة في التحديث التالي */ }
+        } catch (e) { if (!syncWarned) { syncWarned = true; toast(t("تعذّر تحديث قائمة المدارس للمعلمين. تأكد من نشر قواعد Firestore الجديدة."), "error"); } }
       }
     }
 

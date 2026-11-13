@@ -229,5 +229,6 @@ export const EN = {
   "حسابي": "My account", "تغيير كلمة المرور": "Change password", "سيصلك رابط على بريدك الإلكتروني لتعيين كلمة مرور جديدة.": "You'll receive an email link to set a new password.",
   "ليس يوم دوام": "Not a school day", "لا توجد لديك حصص اليوم": "You have no periods today",
   "لم تربطك إدارة المدرسة بجدولك بعد. سيظهر جدولك هنا بعد الربط.": "The school hasn't linked you to your timetable yet. It will appear here once linked.",
-  "لم يتم توزيع جدولك بعد. تابع لاحقًا.": "Your timetable hasn't been scheduled yet. Check back later."
+  "لم يتم توزيع جدولك بعد. تابع لاحقًا.": "Your timetable hasn't been scheduled yet. Check back later.",
+  "تعذّر تحديث قائمة المدارس للمعلمين. تأكد من نشر قواعد Firestore الجديدة.": "Couldn't update the school list for teachers. Make sure the new Firestore rules are published."
 };
