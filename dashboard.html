@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>لوحة المدرسة | {app}</title>
   <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
   <link rel="stylesheet" href="assets/style.css">
@@ -13,26 +13,46 @@
 <div class="app hidden" id="appRoot">
   <aside class="side" id="side">
     <div class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></div>
-    <div class="school-name" id="schoolName"></div>
+    <div class="school-name" data-school-name></div>
     <nav id="nav">
-      <a href="#overview" data-v="overview">📊 الرئيسية</a>
-      <a href="#settings" data-v="settings">⚙️ إعدادات الدوام</a>
-      <a href="#grades" data-v="grades">🏷️ الصفوف والشعب</a>
-      <a href="#subjects" data-v="subjects">📚 المواد</a>
-      <a href="#teachers" data-v="teachers">👩‍🏫 المعلمون</a>
-      <a href="#timetable" data-v="timetable">🗓️ توزيع الجدول <span class="soon">قريبًا</span></a>
+      <a href="#overview" data-v="overview"><span data-ic="home"></span>الرئيسية</a>
+      <a href="#teachers" data-v="teachers"><span data-ic="teachers"></span>المعلمون</a>
+      <a href="#subjects" data-v="subjects"><span data-ic="subjects"></span>المواد</a>
+      <a href="#grades" data-v="grades"><span data-ic="grades"></span>الصفوف والشعب</a>
+      <a href="#timetable" data-v="timetable"><span data-ic="timetable"></span>توزيع الجدول <span class="soon">قريبًا</span></a>
+      <a href="#settings" data-v="settings"><span data-ic="settings"></span>إعدادات الدوام</a>
     </nav>
     <button class="lang-btn" data-lang-toggle></button>
-    <button class="btn logout" id="logoutBtn">تسجيل الخروج</button>
+    <button class="btn logout" data-logout><span data-ic="logout" data-size="18"></span>تسجيل الخروج</button>
   </aside>
-  <div class="side-shade" id="shade"></div>
 
-  <div>
-    <div class="topbar">
-      <div class="logo"><span class="logo-mark"><i></i><i></i><i></i><i></i></span><span data-app-name></span></div>
-      <div class="tb-actions"><button class="lang-btn" data-lang-toggle></button><button class="menu-btn" id="menuBtn">☰</button></div>
-    </div>
+  <div class="content">
+    <header class="topbar">
+      <div class="tb-title">
+        <span class="logo-mark sm"><i></i><i></i><i></i><i></i></span>
+        <div><b data-app-name></b><small data-school-name></small></div>
+      </div>
+      <button class="lang-btn" data-lang-toggle></button>
+    </header>
     <main class="main" id="view"></main>
+  </div>
+
+  <nav class="bottom-nav" id="bnav">
+    <a href="#overview" data-v="overview"><span data-ic="home"></span><span>الرئيسية</span></a>
+    <a href="#teachers" data-v="teachers"><span data-ic="teachers"></span><span>المعلمون</span></a>
+    <a href="#subjects" data-v="subjects"><span data-ic="subjects"></span><span>المواد</span></a>
+    <a href="#grades" data-v="grades"><span data-ic="grades"></span><span>الشعب</span></a>
+    <a href="#" data-more><span data-ic="more"></span><span>المزيد</span></a>
+  </nav>
+
+  <div class="sheet-back" id="sheet">
+    <div class="sheet">
+      <div class="sheet-grip"></div>
+      <a href="#timetable" data-v="timetable"><span data-ic="timetable"></span>توزيع الجدول <span class="badge info">قريبًا</span></a>
+      <a href="#settings" data-v="settings"><span data-ic="settings"></span>إعدادات الدوام</a>
+      <button data-lang-toggle-row><span data-ic="globe"></span><span data-lang-label></span></button>
+      <button class="danger-row" data-logout><span data-ic="logout"></span>تسجيل الخروج</button>
+    </div>
   </div>
 </div>
 

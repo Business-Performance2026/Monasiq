@@ -1,5 +1,6 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr } from "./app.js";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn } from "./app.js";
+import { setLang } from "./i18n.js";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -32,13 +33,16 @@ function init(user) {
   SID = user.uid;
   $("loading").classList.add("hidden");
   $("appRoot").classList.remove("hidden");
-  $("logoutBtn").onclick = logout;
-  const side = $("side"), shade = $("shade");
-  const closeSide = () => { side.classList.remove("open"); shade.classList.remove("show"); };
-  $("menuBtn").onclick = () => { side.classList.add("open"); shade.classList.add("show"); };
-  shade.onclick = closeSide;
-  $("nav").onclick = closeSide;
-  window.addEventListener("hashchange", render);
+  fillIcons();
+  document.querySelectorAll("[data-logout]").forEach(b => (b.onclick = logout));
+  const sheet = $("sheet");
+  const closeSheet = () => sheet.classList.remove("show");
+  document.querySelector("[data-more]").onclick = e => { e.preventDefault(); sheet.classList.add("show"); };
+  sheet.onclick = e => { if (e.target === sheet || e.target.closest("a")) closeSheet(); };
+  const lb = document.querySelector("[data-lang-label]");
+  lb.textContent = isEn ? "العربية" : "English"; lb.setAttribute("data-no-i18n", "");
+  document.querySelector("[data-lang-toggle-row]").onclick = () => setLang(isEn ? "ar" : "en");
+  window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
   $("modalBack").addEventListener("click", e => { if (e.target.id === "modalBack") closeModal(); });
 
   const mark = k => { loaded.add(k); render(); };
@@ -46,7 +50,7 @@ function init(user) {
   onSnapshot(doc(db, "schools", SID), d => {
     S.school = { id: d.id, ...d.data() };
     if (S.school.status !== "active") return location.replace("login.html?s=" + S.school.status);
-    $("schoolName").textContent = S.school.name;
+    document.querySelectorAll("[data-school-name]").forEach(e => { e.textContent = S.school.name; e.setAttribute("data-no-i18n", ""); });
     loaded.has("school") ? render() : mark("school");
   }, e => toast(errMsg(e), "error"));
 
@@ -71,7 +75,8 @@ const VIEWS = { overview: vOverview, settings: vSettings, grades: vGrades, subje
 function render() {
   if (loaded.size < NEED) return;
   const v = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
-  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("active", a.dataset.v === v));
+  document.querySelectorAll("#nav a, #bnav a, #sheet a").forEach(a => a.classList.toggle("active", a.dataset.v === v));
+  document.querySelector("[data-more]").classList.toggle("active", v === "settings" || v === "timetable");
   const view = $("view");
   view.onclick = null;
   view.innerHTML = VIEWS[v]();
@@ -166,7 +171,7 @@ function vSettings() {
   <div class="card">
     <h3>الحصص اليومية</h3>
     <p class="muted" style="margin-top:0">أنشئ الحصص تلقائيًا ثم عدّل أوقات أي حصة إذا احتجت.</p>
-    <div class="grid-3" style="grid-template-columns:repeat(4,1fr)">
+    <div class="g-periods">
       <div class="field"><label>عدد الحصص</label><input type="number" id="gCount" min="1" max="12" value="${draftPeriods.length || 8}"></div>
       <div class="field"><label>بداية أول حصة</label><input type="time" id="gStart" value="${draftPeriods[0]?.start || "08:00"}"></div>
       <div class="field"><label>مدة الحصة (دقيقة)</label><input type="number" id="gDur" min="10" value="45"></div>
@@ -231,7 +236,7 @@ function vGrades() {
   <div class="page-title"><h1>الصفوف والشعب</h1></div>
   <div class="card">
     <h3>إضافة صف</h3>
-    <form id="gradeForm" class="grid-3" style="grid-template-columns:2fr 1fr 1fr auto;align-items:end">
+    <form id="gradeForm" class="g-grade">
       <div class="field"><label>اسم الصف</label><input name="name" list="gradeNames" placeholder="مثال: العاشر" required></div>
       <div class="field"><label>الرمز (يظهر في الشعبة)</label><input name="code" placeholder="10" required></div>
       <div class="field"><label>عدد الشعب</label><input name="count" type="number" min="0" max="40" value="1"></div>
@@ -343,7 +348,7 @@ function subjectModal(s) {
   s = s || { name: "", color: COLORS[S.subjects.length % COLORS.length], periods: {} };
   openModal(`${modalHead(isNew ? "إضافة مادة" : "تعديل المادة")}
   <form id="subForm">
-    <div class="grid-2" style="grid-template-columns:1fr 110px">
+    <div class="g-subj">
       <div class="field"><label>اسم المادة</label><input name="name" value="${esc(s.name)}" required placeholder="مثال: الفيزياء"></div>
       <div class="field"><label>اللون</label><input name="color" type="color" value="${s.color}" style="padding:.2em;height:46px"></div>
     </div>
@@ -445,7 +450,7 @@ function teacherModal(t) {
 
     <div class="card" style="box-shadow:none;background:#fbfdfd">
       <div class="card-head" style="margin-bottom:.6rem"><h3>إسناد الشعب</h3><span>المجموع: <b id="tTotal">0</b> حصة</span></div>
-      <div class="grid-2" style="grid-template-columns:1fr auto;align-items:end">
+      <div class="g-asg">
         <div class="field"><label>المادة</label><select id="aSub">${subOpts(t.subjectId)}</select></div>
         <div class="field"><button type="button" class="btn primary" id="aAdd">+ إسناد الشعب المحددة</button></div>
       </div>

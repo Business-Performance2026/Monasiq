@@ -1,0 +1,59 @@
+# مُنسِّق — منصة توزيع جدول الحصص للمدارس
+
+منصة ويب تعمل على الكمبيوتر والجوال. كل مدرسة تسجّل وتنتظر موافقتك، ثم تحصل على لوحة تحكم خاصة بها.
+الملفات تُرفع على **GitHub Pages**، والبيانات تُحفظ في **Firebase**.
+
+## الملفات
+| الملف | الوظيفة |
+|---|---|
+| `index.html` | الصفحة الرئيسية (عن المنصة، المميزات، طريقة التسجيل) |
+| `register.html` | تسجيل مدرسة جديدة (بانتظار الموافقة) |
+| `login.html` | تسجيل الدخول + نسيت كلمة المرور |
+| `admin.html` | لوحتك أنت: الموافقة على المدارس / إيقاف / حذف |
+| `dashboard.html` | لوحة المدرسة: الإعدادات، الصفوف والشعب، المواد، المعلمون |
+| `assets/config.js` | **اسم المنصة + إعدادات Firebase** (الملف الوحيد الذي تعدّله) |
+| `assets/i18n-en.js` | الترجمة الإنجليزية لكل نصوص المنصة (زر عربي / English) |
+| `firestore.rules` | قواعد الحماية (تمنع أي مدرسة من رؤية بيانات غيرها) |
+
+---
+
+## خطوات التشغيل
+
+### 1) إنشاء مشروع Firebase
+1. ادخل https://console.firebase.google.com واضغط **Add project**.
+2. من **Build > Authentication > Get started** فعّل **Email/Password**.
+3. من **Build > Firestore Database > Create database** اختر أقرب موقع (مثلًا `europe-west` أو `me-central`) وابدأ بـ **Production mode**.
+4. من **Project settings (⚙️) > General > Your apps** اضغط أيقونة الويب `</>`، سجّل التطبيق، وانسخ `firebaseConfig`.
+
+### 2) ربط المنصة بـ Firebase
+افتح `assets/config.js` والصق القيم مكان `PASTE_...`. يمكنك أيضًا تغيير اسم المنصة ورقم التواصل من نفس الملف.
+
+### 3) قواعد الحماية
+**Firestore Database > Rules**: احذف الموجود والصق محتوى `firestore.rules` ثم **Publish**.
+
+### 4) جعل نفسك مدير المنصة
+1. **Authentication > Users > Add user**: أضف بريدك وكلمة مرور.
+2. انسخ **User UID** الخاص بك.
+3. **Firestore Database > Start collection**: اسم المجموعة `admins`، و Document ID = الـ UID الذي نسخته، وأضف حقلًا مثل `name` = اسمك. احفظ.
+4. الآن عند الدخول من `login.html` ستذهب مباشرة إلى لوحة الإدارة.
+
+### 5) الرفع على GitHub Pages
+1. أنشئ مستودعًا جديدًا (Public) على GitHub.
+2. **Add file > Upload files**: ارفع كل الملفات والمجلد `assets` كما هي.
+3. **Settings > Pages**: اختر `Deploy from a branch` ثم `main` و `/ (root)` واحفظ.
+4. بعد دقيقة يصبح الرابط: `https://اسم-حسابك.github.io/اسم-المستودع/`
+
+### 6) السماح للنطاق في Firebase
+**Authentication > Settings > Authorized domains > Add domain**: أضف `اسم-حسابك.github.io`.
+
+---
+
+## طريقة العمل
+1. المدرسة تسجّل من `register.html` → حالتها **بانتظار الموافقة**.
+2. أنت تدخل لوحة الإدارة وتضغط **موافقة**.
+3. المدرسة تدخل وتبدأ: إعدادات الدوام → الصفوف والشعب → المواد → المعلمون.
+
+## ملاحظات
+- مفاتيح `firebaseConfig` ليست سرية، ويُسمح بظهورها في GitHub. الحماية الحقيقية هي قواعد `firestore.rules`.
+- عند حذف مدرسة من لوحتك تُحذف بياناتها، لكن حساب الدخول يبقى في Authentication. احذفه يدويًا من **Authentication > Users** إن أردت.
+- المرحلة القادمة: **التوزيع التلقائي للجدول + التعديل اليدوي + الطباعة**.

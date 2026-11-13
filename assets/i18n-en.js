@@ -110,7 +110,7 @@ export const EN = {
 
   // لوحة المدرسة
   "لوحة المدرسة": "School dashboard", "إعدادات الدوام": "School hours", "الصفوف والشعب": "Grades & sections",
-  "المواد": "Subjects", "المعلمون": "Teachers", "توزيع الجدول": "Timetable",
+  "المواد": "Subjects", "المعلمون": "Teachers", "توزيع الجدول": "Timetable", "المزيد": "More", "الشعب": "Sections",
   "أهلًا، {0}": "Welcome, {0}", "حصة مُسندة أسبوعيًا": "assigned periods / week",
   "ابدأ من هنا": "Start here", "حدّد أيام الدوام وعدد الحصص": "Set school days and periods",
   "أضف الصفوف والشعب": "Add grades and sections", "أضف المواد وعدد حصصها لكل صف": "Add subjects and their periods per grade",
@@ -149,7 +149,7 @@ export const EN = {
 
   "إضافة معلم": "Add teacher", "تعديل بيانات المعلم": "Edit teacher", "بحث": "Search",
   "يُفضّل إضافة": "It's best to add", "و": "and", "أولًا حتى تستطيع إسنادها للمعلمين": "first so you can assign them to teachers",
-  "الشعب": "sections", "الشعب المُسندة": "Assigned sections",
+  "الشعب المُسندة": "Assigned sections",
   "لا نتائج": "No results", "اسم المعلم": "Teacher name", "مادة التخصص": "Main subject",
   "النصاب الأسبوعي (حصص": "Weekly load (periods", "إسناد الشعب": "Assign sections", "إسناد الشعب المحددة": "Assign selected sections",
   "اختر المادة ثم حدّد الشعب واضغط «إسناد": "Choose a subject, tick sections and press “Assign",

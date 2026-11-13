@@ -61,7 +61,7 @@ export function initI18n() {
   html.lang = lang;
   html.dir = isEn ? "ltr" : "rtl";
   document.querySelectorAll("[data-lang-toggle]").forEach(b => {
-    b.textContent = isEn ? "العربية" : "English";
+    b.innerHTML = isEn ? '<span class="l-full">العربية</span><span class="l-short">ع</span>' : '<span class="l-full">English</span><span class="l-short">EN</span>';
     b.setAttribute("data-no-i18n", "");
     b.onclick = () => setLang(isEn ? "ar" : "en");
   });
