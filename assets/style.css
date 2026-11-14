@@ -601,3 +601,9 @@ table.tt.tr { min-width: 0; }
 .sec-btn.has-rules { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
 .sec-btn.has-rules .sec-sub { color: #b45309; }
 .sec-actions .sec-del { margin-inline-start: auto; }
+
+/* تفريغ المعلم */
+.free-box { margin-bottom: 1rem; }
+.free-add { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.free-add select { width: auto; min-width: 100px; padding: .45em .5em; }
+.free-chip { background: #ede9fe; border-color: #ddd6fe; color: #5b21b6; }

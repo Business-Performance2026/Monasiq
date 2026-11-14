@@ -34,6 +34,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
     for (const [tid, ti] of tM) {
       const r = rules.teachers?.[tid]; if (!r) continue;
       for (const s of r.meetings?.keys?.() || []) if (s < N) tBlock[ti * N + s] = 1;
+      for (const s of r.unavail || []) if (s < N) tBlock[ti * N + s] = 1;
       for (const [p, v] of Object.entries(r.periodMax || {})) if (+p < P) pMax[ti * P + +p] = v;
       maxRun[ti] = r.maxRun || 0;
       mode[ti] = { double: 1, noConsec: 2, spread: 3 }[r.mode] || 0;

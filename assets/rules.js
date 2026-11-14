@@ -23,6 +23,13 @@ export function buildRules({ settings, departments = [], teachers = [], sections
     const meetings = new Map(); // slot -> اسم القسم
     for (const d of depts) for (const m of d.meetings || []) if (ok(m)) meetings.set(m.d * P + m.p, d.name);
     const r = t.rules || {};
+    // أوقات تفريغ المعلم (مثل الدراسة): يوم كامل أو من حصة إلى حصة
+    const unavail = new Set();
+    for (const f of r.free || []) {
+      if (!(f.d >= 0 && f.d < D)) continue;
+      const a = Math.max(0, +f.from || 0), b = Math.min(P - 1, f.to === undefined || f.to === null ? P - 1 : +f.to);
+      for (let p = a; p <= b; p++) unavail.add(f.d * P + p);
+    }
     const periodMax = {};
     for (let p = 0; p < P; p++) {
       const own = r.periodMax?.[p], def = defMax[p];
@@ -32,7 +39,7 @@ export function buildRules({ settings, departments = [], teachers = [], sections
     const mode = MODES.includes(r.mode) ? r.mode : "none";
     let maxRun = r.maxRun !== undefined && r.maxRun !== null && r.maxRun !== "" ? +r.maxRun : defRun;
     if (mode === "noConsec") maxRun = 1;
-    out[t.id] = { meetings, periodMax, maxRun: maxRun > 0 ? maxRun : 0, mode, doubles: mode === "double" ? Math.max(1, +r.doubles || 1) : 0, depts: depts.map(d => d.id) };
+    out[t.id] = { meetings, unavail, periodMax, maxRun: maxRun > 0 ? maxRun : 0, mode, doubles: mode === "double" ? Math.max(1, +r.doubles || 1) : 0, depts: depts.map(d => d.id) };
   }
   // قيود الشعب: أوقات فارغة، وأيام مخصصة لمعلم واحد
   const secOut = {};
@@ -68,6 +75,7 @@ export function slotViolation(rules, teacherId, d, p, mySlots, L) {
   if (globalBlocked.has(s)) return L("هذه الحصة فارغة لجميع المعلمين");
   const r = rules.teachers[teacherId];
   if (!r) return null;
+  if (r.unavail?.has(s)) return L("المعلم متفرّغ (غير متاح) في هذا الوقت");
   if (r.meetings.has(s)) return L("المعلم لديه اجتماع قسم {0} في هذا الوقت", r.meetings.get(s));
   if (r.periodMax[p] !== undefined) {
     const n = [...mySlots].filter(x => x % P === p).length;
@@ -124,13 +132,13 @@ export function precheck(rules, lessons, names) {
   for (const [t, n] of tLoad) {
     const r = rules.teachers[t];
     let have = 0;
-    for (let s = 0; s < N; s++) if (!globalBlocked.has(s) && !(r && r.meetings.has(s))) have++;
+    for (let s = 0; s < N; s++) if (!globalBlocked.has(s) && !(r && (r.meetings.has(s) || r.unavail?.has(s)))) have++;
     if (r) {
       // سقف حسب حدود الحصص
       let cap = 0;
       for (let p = 0; p < P; p++) {
         let free = 0;
-        for (let d = 0; d < D; d++) { const s = d * P + p; if (!globalBlocked.has(s) && !r.meetings.has(s)) free++; }
+        for (let d = 0; d < D; d++) { const s = d * P + p; if (!globalBlocked.has(s) && !r.meetings.has(s) && !r.unavail?.has(s)) free++; }
         cap += r.periodMax[p] !== undefined ? Math.min(free, r.periodMax[p]) : free;
       }
       // سقف حسب الحصص المتتالية

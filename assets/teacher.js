@@ -1,7 +1,7 @@
 // لوحة المعلم: جدولي، حصص اليوم، حسابي
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611141414";
-import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141414";
-import { buildRules } from "./rules.js?v=202611141414";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611141429";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141429";
+import { buildRules } from "./rules.js?v=202611141429";
 import { collection, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 applyBranding();
@@ -63,6 +63,7 @@ function blockedMap() {
   const r = buildRules({ settings: st, departments: S.departments, teachers: S.teacher ? [S.teacher] : [] });
   r.globalBlocked.forEach(sl => m.set(sl, tr("فارغة للجميع")));
   if (S.teacher) r.teachers[S.teacher.id]?.meetings.forEach((n, sl) => { if (!m.has(sl)) m.set(sl, tf("اجتماع {0}", n)); });
+  if (S.teacher) r.teachers[S.teacher.id]?.unavail.forEach(sl => { if (!m.has(sl)) m.set(sl, tr("تفريغ")); });
   return m;
 }
 const mine = () => S.acc?.teacherId ? S.tt.filter(x => x.t === S.acc.teacherId && x.d != null) : [];
