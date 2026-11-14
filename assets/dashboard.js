@@ -2,6 +2,8 @@
 import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js";
 import { setLang } from "./i18n.js";
 import { schedule, reconcile } from "./scheduler.js";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -213,12 +215,13 @@ function vSettings() {
   </div>
   <div class="card">
     <h3>استيراد وتصدير البيانات</h3>
-    <p class="muted" style="margin-top:0">استورد الصفوف والشعب والمواد والمعلمين والجدول دفعة واحدة من ملف بيانات (JSON)، أو صدّر نسخة احتياطية من بيانات مدرستك.</p>
-    <div class="field"><label>ملف البيانات</label><input type="file" id="impFile" accept=".json,application/json"></div>
+    <p class="muted" style="margin-top:0">استورد المعلمين والصفوف والشعب والمواد والحصص دفعة واحدة من ملف PDF لجداول المعلمين (مثل جداول aSc) أو من ملف بيانات JSON، أو صدّر بيانات مدرستك.</p>
+    <div class="field"><label>ملف PDF أو JSON</label><input type="file" id="impFile" accept=".json,.pdf,application/json,application/pdf"></div>
     <label class="check" style="margin-bottom:1rem"><input type="checkbox" id="impReplace" checked> حذف البيانات الحالية قبل الاستيراد</label>
     <div class="row-actions">
       <button class="btn primary" id="impBtn"><span data-ic="upload" data-size="18"></span>استيراد</button>
-      <button class="btn" id="expBtn"><span data-ic="download" data-size="18"></span>تصدير نسخة احتياطية</button>
+      <button class="btn" id="expBtn"><span data-ic="download" data-size="18"></span>تصدير البيانات JSON</button>
+      <button class="btn" id="expPdf"><span data-ic="print" data-size="18"></span>تصدير الجداول PDF</button>
     </div>
   </div>`;
 }
@@ -249,14 +252,31 @@ BIND.settings = v => {
   $("impBtn").onclick = async () => {
     const f = $("impFile").files[0];
     if (!f) return toast("اختر ملف البيانات أولًا", "error");
-    let data;
-    try { data = JSON.parse(await f.text()); } catch { return toast("الملف غير صالح", "error"); }
-    if (data.format !== "monasiq-import") return toast("الملف غير صالح", "error");
     const replace = $("impReplace").checked;
-    const msg = tf("سيتم استيراد {0} معلم و{1} شعبة و{2} مادة و{3} حصة في الجدول.", data.teachers?.length || 0, data.sections?.length || 0, data.subjects?.length || 0, data.timetable?.length || 0)
-      + (replace ? " " + tf("سيتم حذف البيانات الحالية أولًا.") : "");
-    if (!(await confirmBox(msg, tr("استيراد"), replace))) return;
-    await importData(data, replace);
+    let data, warnings = [], extra = "";
+    if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+      openModal(`<div class="gen-box"><div class="spinner"></div><h3>${tr("جارٍ قراءة ملف PDF")}</h3><div class="progress"><i id="pdfBar"></i></div></div>`);
+      $("modalBack").dataset.lock = "1";
+      try {
+        const pages = await readPdfPages(f, r => { const b = $("pdfBar"); if (b) b.style.width = Math.round(r * 100) + "%"; });
+        const parsed = parseTimetablePages(pages);
+        const r = buildImport(parsed, settings());
+        data = r.data; warnings = r.warnings;
+        extra = tf("تمت قراءة {0} جدول من {1} صفحة.", r.stats.grids, r.stats.pages);
+      } catch (ex) { console.error(ex); }
+      delete $("modalBack").dataset.lock; closeModal();
+      if (!data || !data.timetable?.length) return toast("لم يتم العثور على جداول يمكن قراءتها في هذا الملف. تأكد أن الملف PDF نصي (غير ممسوح ضوئيًا) ويحتوي جداول المعلمين.", "error");
+    } else {
+      try { data = JSON.parse(await f.text()); } catch { return toast("الملف غير صالح", "error"); }
+      if (data.format !== "monasiq-import") return toast("الملف غير صالح", "error");
+    }
+    const ok = await importPreview(data, warnings, extra, replace);
+    if (ok) await importData(data, replace);
+  };
+  $("expPdf").onclick = () => {
+    const sh = allSheets("teacher");
+    if (!sh.length) return toast("لا يوجد جدول موزّع للتصدير بعد", "error");
+    printSheets(sh, 2);
   };
   $("expBtn").onclick = exportData;
   $("infoForm").onsubmit = async e => {
@@ -270,6 +290,30 @@ BIND.settings = v => {
 };
 
 // ---------- الاستيراد والتصدير ----------
+function importPreview(data, warnings, extra, replace) {
+  return new Promise(resolve => {
+    const n = k => (data[k] || []).length;
+    openModal(`${modalHead(tr("مراجعة البيانات قبل الاستيراد"))}
+      ${extra ? `<p class="muted" style="margin-top:0">${esc(extra)}</p>` : ""}
+      <div class="tt-stats imp-stats">
+        <div><b>${n("teachers")}</b><span>${tr("المعلمون")}</span></div>
+        <div><b>${n("sections")}</b><span>${tr("الشعب")}</span></div>
+        <div><b>${n("subjects")}</b><span>${tr("المواد")}</span></div>
+        <div><b>${n("timetable")}</b><span>${tr("حصص الجدول")}</span></div>
+      </div>
+      <p class="muted">${esc(tr("الصفوف"))}: ${(data.grades || []).map(g => esc(g.name)).join("، ")} · ${esc(tr("أيام الدوام"))}: ${(data.settings?.days || []).length} · ${esc(tr("الحصص اليومية"))}: ${data.settings?.periods?.length || data.settings?.periodsCount || "-"}</p>
+      <details class="imp-more"><summary>${tr("المواد")}</summary><p>${(data.subjects || []).map(s => `<span class="chip"><span class="dot" style="background:${s.color}"></span>${esc(s.name)}</span>`).join("")}</p></details>
+      <details class="imp-more"><summary>${tr("المعلمون")}</summary><p>${(data.teachers || []).map(t => `<span class="chip">${esc(t.name)} <b>${t.maxLoad || ""}</b></span>`).join("")}</p></details>
+      ${warnings.length ? `<div class="notice warn"><b>${tr("ملاحظات")}:</b><ul>${warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+      ${replace ? `<div class="notice bad">${tr("سيتم حذف البيانات الحالية أولًا.")}</div>` : ""}
+      <div class="modal-actions"><button class="btn primary" data-go>${tr("استيراد")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+    const done = v => { $("modal").onclick = null; resolve(v); };
+    $("modal").onclick = e => {
+      if (e.target.closest("[data-go]")) { done(true); }
+      else if (e.target.closest("[data-close]")) done(false);
+    };
+  });
+}
 async function importData(data, replace) {
   openModal(`<div class="gen-box"><div class="spinner"></div><h3>${tr("جارٍ الاستيراد")}</h3><div class="progress"><i id="impBar"></i></div><p class="muted" id="impTxt"></p></div>`);
   $("modalBack").dataset.lock = "1";
@@ -293,8 +337,11 @@ async function importData(data, replace) {
       ops.push(b => b.delete(doc(db, "schools", SID, "timetable", "main")));
       await flush("حذف البيانات الحالية", 2, 20);
     }
-    if (data.settings?.days?.length && data.settings?.periods?.length) {
-      await updateDoc(doc(db, "schools", SID), { settings: { days: data.settings.days, periods: data.settings.periods }, updatedAt: serverTimestamp() });
+    if (data.settings?.days?.length && (data.settings?.periods?.length || data.settings?.periodsCount)) {
+      const cur = settings().periods;
+      const periods = data.settings.periods?.length ? data.settings.periods
+        : (cur.length === data.settings.periodsCount ? cur : defaultPeriods(data.settings.periodsCount, cur[0]?.start || "08:00"));
+      await updateDoc(doc(db, "schools", SID), { settings: { days: data.settings.days, periods }, updatedAt: serverTimestamp() });
     }
     // معرّفات جديدة لكل عنصر قبل الكتابة
     const id = {};
@@ -911,36 +958,43 @@ async function ttGenerate() {
   else toast(tf("تم توزيع {0} حصة بدون تعارض ✅", r.lessons.length), "success");
 }
 
-// ---------- الطباعة ----------
-function ttPrintMenu() {
-  openModal(`${modalHead(tr("طباعة"))}
-    <div class="print-opts">
-      <button class="btn block" data-pr="one">طباعة الجدول المعروض</button>
-      <button class="btn block" data-pr="teachers">طباعة جداول كل المعلمين</button>
-      <button class="btn block" data-pr="sections">طباعة جداول كل الشعب</button>
-    </div>
-    <p class="muted" style="margin-bottom:0">للحفظ كملف PDF اختر «حفظ بتنسيق PDF» من نافذة الطباعة.</p>`);
-  $("modal").onclick = e => {
-    const b = e.target.closest("[data-pr]"); if (!b) return;
-    closeModal(); $("modal").onclick = null;
-    ttPrint(b.dataset.pr);
-  };
+// ---------- الطباعة والتحميل ----------
+function sheetFor(mode, id) {
+  return buildSheet({
+    kind: mode, ownerId: id,
+    title: mode === "teacher" ? (teacherOf(id)?.name || "") : tf("الشعبة {0}", secLabel(section(id))),
+    school: S.school.name, settings: settings(), lessons: TT.lessons || [],
+    subjectOf: subject, sectionLabel: id2 => secLabel(section(id2)), teacherName: t => shortName(teacherOf(t)?.name)
+  });
 }
-function ttPrint(kind) {
-  const idx = ttIndex();
-  const blocks = [];
-  const add = (mode, id, title) => blocks.push(`<div class="pblock"><div class="ph-head"><b>${esc(title)}</b><span>${esc(S.school.name)}</span></div>${ttGridHTML(mode, id, { idx })}</div>`);
-  const tLoad = new Set(TT.lessons.map(x => x.t)), cLoad = new Set(TT.lessons.map(x => x.c));
-  if (kind === "one") add(TV.mode, TV.id, TV.mode === "teacher" ? teacherOf(TV.id)?.name : tf("الشعبة {0}", secLabel(section(TV.id))));
-  if (kind === "teachers") S.teachers.filter(t => tLoad.has(t.id)).forEach(t => add("teacher", t.id, t.name));
-  if (kind === "sections") S.sections.filter(s => cLoad.has(s.id)).forEach(s => add("section", s.id, tf("الشعبة {0}", secLabel(s))));
-  const per = kind === "one" ? 1 : 4;
-  let html = "";
-  for (let i = 0; i < blocks.length; i += per) html += `<div class="ppage ${per === 4 ? "four" : ""}">${blocks.slice(i, i + per).join("")}</div>`;
-  let pa = $("printArea");
-  if (!pa) { pa = document.createElement("div"); pa.id = "printArea"; document.body.appendChild(pa); }
-  pa.innerHTML = html;
-  setTimeout(() => window.print(), 300);
+function allSheets(mode) {
+  ttSync();
+  const used = new Set((TT.lessons || []).map(x => mode === "teacher" ? x.t : x.c));
+  return (mode === "teacher" ? S.teachers : S.sections).filter(x => used.has(x.id)).map(x => sheetFor(mode, x.id));
+}
+function ttPrintMenu() {
+  openModal(`${modalHead(tr("طباعة وتحميل"))}
+    <div class="print-opts">
+      <button class="btn block" data-pr="one"><span data-ic="print" data-size="18"></span>طباعة الجدول المعروض</button>
+      <button class="btn block primary" data-pr="dl"><span data-ic="download" data-size="18"></span>تحميل الجدول المعروض PDF</button>
+      <button class="btn block" data-pr="teachers"><span data-ic="print" data-size="18"></span>طباعة جداول كل المعلمين</button>
+      <button class="btn block" data-pr="sections"><span data-ic="print" data-size="18"></span>طباعة جداول كل الشعب</button>
+    </div>
+    <p class="muted" style="margin-bottom:0">للحفظ كملف PDF من الطباعة اختر «حفظ بتنسيق PDF» من نافذة الطباعة.</p>`);
+  fillIcons($("modal"));
+  $("modal").onclick = async e => {
+    const b = e.target.closest("[data-pr]"); if (!b) return;
+    $("modal").onclick = null; closeModal();
+    const k = b.dataset.pr;
+    if (k === "one") printSheets([sheetFor(TV.mode, TV.id)], 1);
+    if (k === "teachers") printSheets(allSheets("teacher"), 2);
+    if (k === "sections") printSheets(allSheets("section"), 2);
+    if (k === "dl") {
+      const sh = sheetFor(TV.mode, TV.id);
+      try { toast(tr("جارٍ تجهيز الملف")); await downloadSheetsPDF([sh], sh.title); }
+      catch (ex) { toast(tr("تعذّر إنشاء ملف PDF. استخدم الطباعة ثم «حفظ بتنسيق PDF»."), "error"); }
+    }
+  };
 }
 
 // =====================================================

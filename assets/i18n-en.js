@@ -231,5 +231,19 @@ export const EN = {
   "لم تربطك إدارة المدرسة بجدولك بعد. سيظهر جدولك هنا بعد الربط.": "The school hasn't linked you to your timetable yet. It will appear here once linked.",
   "لم يتم توزيع جدولك بعد. تابع لاحقًا.": "Your timetable hasn't been scheduled yet. Check back later.",
   "تعذّر تحديث قائمة المدارس للمعلمين. تأكد من نشر قواعد Firestore الجديدة.": "Couldn't update the school list for teachers. Make sure the new Firestore rules are published.",
-  "{0} حصص": "{0} p/w"
+  "{0} حصص": "{0} p/w",
+  // الطباعة والاستيراد من PDF
+  "جدول المعلم": "Teacher timetable", "جدول الشعبة": "Section timetable", "طباعة وتحميل": "Print & download",
+  "تحميل الجدول المعروض PDF": "Download current timetable (PDF)", "تحميل PDF": "Download PDF",
+  "جارٍ تجهيز الملف": "Preparing file", "تعذّر إنشاء ملف PDF. استخدم الطباعة ثم «حفظ بتنسيق PDF».": "Couldn't create the PDF. Use Print, then “Save as PDF”.",
+  "ملف PDF أو JSON": "PDF or JSON file",
+  "استورد المعلمين والصفوف والشعب والمواد والحصص دفعة واحدة من ملف PDF لجداول المعلمين (مثل جداول aSc) أو من ملف بيانات JSON، أو صدّر بيانات مدرستك.": "Import teachers, grades, sections, subjects and periods in one go from a PDF of teacher timetables (e.g. aSc) or a JSON data file, or export your school's data.",
+  "تصدير البيانات JSON": "Export data (JSON)", "تصدير الجداول PDF": "Export timetables (PDF)",
+  "جارٍ قراءة ملف PDF": "Reading PDF file", "تمت قراءة {0} جدول من {1} صفحة.": "Read {0} timetables from {1} pages.",
+  "لم يتم العثور على جداول يمكن قراءتها في هذا الملف. تأكد أن الملف PDF نصي (غير ممسوح ضوئيًا) ويحتوي جداول المعلمين.": "No readable timetables were found. Make sure the PDF is text-based (not scanned) and contains teacher timetables.",
+  "لا يوجد جدول موزّع للتصدير بعد": "There's no scheduled timetable to export yet",
+  "مراجعة البيانات قبل الاستيراد": "Review data before importing", "حصص الجدول": "Timetable periods", "الصفوف": "Grades", "ملاحظات": "Notes",
+  "حصة بدون رقم شعبة لم تُستورد": "periods without a section number were not imported",
+  "حصة مشتركة بين معلمَين لنفس الشعبة في نفس الوقت — بقيت لمعلم واحد": "co-taught periods (two teachers, same section, same time) were kept for one teacher only",
+  "حصة مكررة للمعلم في نفس الوقت — أُخذت الأولى فقط": "duplicate periods for the same teacher at the same time — only the first was kept"
 };

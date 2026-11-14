@@ -1,5 +1,6 @@
 // لوحة المعلم: جدولي، حصص اليوم، حسابي
 import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js";
 import { collection, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 applyBranding();
@@ -89,7 +90,7 @@ function render() {
   </div>
 
   <div class="card tt-card">
-    <div class="card-head"><h3>جدولي الأسبوعي</h3><button class="btn sm" id="printBtn"><span data-ic="print" data-size="16"></span>طباعة</button></div>
+    <div class="card-head"><h3>جدولي الأسبوعي</h3><div class="row-actions"><button class="btn sm" id="printBtn"><span data-ic="print" data-size="16"></span>طباعة</button><button class="btn sm primary" id="dlBtn"><span data-ic="download" data-size="16"></span>تحميل PDF</button></div></div>
     <div id="grid"></div>
   </div>` : ""}
 
@@ -106,7 +107,12 @@ function render() {
   </div>`;
   fillIcons($("view"));
   drawGrid();
-  $("printBtn") && ($("printBtn").onclick = printMine);
+  $("printBtn") && ($("printBtn").onclick = () => printSheets([mySheet()], 1));
+  $("dlBtn") && ($("dlBtn").onclick = async () => {
+    const sh = mySheet();
+    try { toast(tr("جارٍ تجهيز الملف")); await downloadSheetsPDF([sh], sh.title); }
+    catch (e) { toast(tr("تعذّر إنشاء ملف PDF. استخدم الطباعة ثم «حفظ بتنسيق PDF»."), "error"); }
+  });
   $("pwBtn").onclick = async () => {
     try { await sendReset(S.acc.email || user.email); toast(tf("تم إرسال رابط إعادة التعيين إلى {0}", S.acc.email || user.email), "success"); }
     catch (e) { toast(errMsg(e), "error"); }
@@ -132,9 +138,9 @@ function drawGrid() {
   const g = $("grid"); if (!g) return;
   g.innerHTML = `<div class="tt-wrap">${gridHTML(innerWidth < 700)}</div>`;
 }
-function printMine() {
-  let pa = $("printArea");
-  if (!pa) { pa = document.createElement("div"); pa.id = "printArea"; document.body.appendChild(pa); }
-  pa.innerHTML = `<div class="ppage"><div class="pblock"><div class="ph-head"><b>${esc(S.acc.name)}</b><span>${esc(S.school.name || "")}</span></div>${gridHTML(false)}</div></div>`;
-  setTimeout(() => window.print(), 300);
+function mySheet() {
+  return buildSheet({
+    kind: "teacher", ownerId: S.acc.teacherId, title: S.acc.name, school: S.school.name || "",
+    settings: settings(), lessons: S.tt, subjectOf: subject, sectionLabel: id => secLabel(section(id)), teacherName: () => ""
+  });
 }

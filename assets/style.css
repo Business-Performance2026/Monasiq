@@ -448,3 +448,59 @@ table.tt.tr { min-width: 0; }
 @media (max-width: 640px) { .acc-info { grid-template-columns: 1fr; } .ti-t { display: none; } .today-item { grid-template-columns: 46px 1fr; } }
 @media (max-width: 480px) { .tp-top .l-full { display: none; } .tp-top .l-short { display: inline; } }
 .chip .pcount { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 0 .4em; font-size: .75rem; font-weight: 700; color: var(--primary); margin-inline-start: .25em; white-space: nowrap; }
+
+/* ============ Timetable sheet (print + PDF download) ============ */
+.sheet { font-family: "Tajawal", system-ui, sans-serif; background: #fff; color: #0f172a; width: 100%; box-sizing: border-box; padding: 18px 20px 14px; border-radius: 14px; }
+.sheet-render { position: fixed; top: 0; left: -12000px; width: 1123px; z-index: -1; }
+.sheet-render .sheet { width: 1123px; min-height: 780px; display: flex; flex-direction: column; }
+.sh-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: linear-gradient(135deg, #0f766e, #115e59 60%, #134e4a); color: #fff; border-radius: 14px; padding: 14px 20px; margin-bottom: 12px; }
+.sh-brand { display: flex; align-items: center; gap: 14px; }
+.sh-brand small { display: block; font-size: 13px; opacity: .85; font-weight: 500; }
+.sh-brand h2 { margin: 0; font-size: 26px; font-weight: 800; line-height: 1.25; color: #fff; }
+.sh-logo { width: 46px; height: 46px; border-radius: 12px; background: rgba(255,255,255,.16); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 9px; flex-shrink: 0; }
+.sh-logo i { background: #fff; border-radius: 3px; } .sh-logo i:nth-child(2) { background: rgba(255,255,255,.5); }
+.sh-stats { display: flex; gap: 10px; }
+.sh-stats div { background: rgba(255,255,255,.14); border-radius: 12px; padding: 6px 14px; text-align: center; min-width: 74px; }
+.sh-stats b { display: block; font-size: 22px; line-height: 1.15; }
+.sh-stats span { font-size: 12px; opacity: .9; }
+.sh-grid { width: 100%; border-collapse: separate; border-spacing: 5px; table-layout: fixed; flex: 1; }
+.sh-corner { width: 92px; }
+.sh-ph { background: #f1f5f9; border-radius: 10px; padding: 6px 2px; font-weight: 700; color: #334155; }
+.sh-pn { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #0f766e; color: #fff; font-size: 14px; font-weight: 800; }
+.sh-ph small { display: block; font-size: 10.5px; color: #64748b; font-weight: 500; margin-top: 2px; direction: ltr; }
+.sh-dh { background: #0f172a; color: #fff; border-radius: 10px; font-size: 15px; font-weight: 700; padding: 0 6px; }
+.sh-c { height: 92px; padding: 0; vertical-align: middle; }
+.sh-empty { background: #f8fafc; border: 1.5px dashed #e2e8f0; border-radius: 10px; }
+.sh-l { height: 100%; min-height: 92px; box-sizing: border-box; border-radius: 10px; border: 0; border-top: 5px solid; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4px; }
+.sh-l b { font-size: 21px; font-weight: 800; line-height: 1.2; }
+.sh-l small { font-size: 12px; color: #334155; line-height: 1.3; margin-top: 2px; font-weight: 500; }
+.sh-foot { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-top: 10px; }
+.sh-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: #334155; }
+.sh-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sh-legend i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+.sh-legend em { font-style: normal; color: #64748b; font-weight: 700; }
+.sh-meta { font-size: 11.5px; color: #94a3b8; white-space: nowrap; }
+.sheet.compact { padding: 6px 4px; }
+.sheet.compact .sh-head { padding: 6px 12px; margin-bottom: 4px; border-radius: 10px; }
+.sheet.compact .sh-brand h2 { font-size: 17px; } .sheet.compact .sh-brand small { font-size: 10px; }
+.sheet.compact .sh-logo { width: 30px; height: 30px; padding: 6px; border-radius: 8px; }
+.sheet.compact .sh-stats div { padding: 2px 8px; min-width: 50px; } .sheet.compact .sh-stats b { font-size: 14px; } .sheet.compact .sh-stats span { font-size: 9px; }
+.sheet.compact .sh-grid { border-spacing: 3px; }
+.sheet.compact .sh-corner { width: 60px; }
+.sheet.compact .sh-c, .sheet.compact .sh-l { height: 40px; min-height: 40px; }
+.sheet.compact .sh-l { border-top-width: 3px; border-radius: 6px; }
+.sheet.compact .sh-l b { font-size: 12px; } .sheet.compact .sh-l small { font-size: 8px; margin-top: 0; }
+.sheet.compact .sh-ph { padding: 2px; border-radius: 6px; } .sheet.compact .sh-pn { width: 16px; height: 16px; font-size: 9px; } .sheet.compact .sh-ph small { font-size: 7px; }
+.sheet.compact .sh-dh { font-size: 10px; border-radius: 6px; }
+.sheet.compact .sh-empty { border-radius: 6px; }
+.sheet.compact .sh-foot { margin-top: 3px; } .sheet.compact .sh-legend { font-size: 8px; gap: 2px 8px; } .sheet.compact .sh-legend i { width: 8px; height: 8px; } .sheet.compact .sh-meta { font-size: 7.5px; }
+@media print {
+  #printArea .ppage { page-break-after: always; break-after: page; }
+  #printArea .ppage.two { display: flex; flex-direction: column; gap: 4mm; }
+  #printArea .sheet { padding: 0; }
+  #printArea .ppage:not(.two) .sh-c, #printArea .ppage:not(.two) .sh-l { height: 22mm; min-height: 22mm; }
+}
+.imp-stats { margin: .4rem 0 .8rem; }
+.imp-more { margin-bottom: .6rem; } .imp-more summary { cursor: pointer; font-weight: 700; } .imp-more p { max-height: 160px; overflow: auto; margin: .4rem 0 0; }
+.notice ul { margin: .3rem 0 0; padding-inline-start: 1.2rem; }
+.print-opts .btn { justify-content: flex-start; }
