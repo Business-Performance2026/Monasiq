@@ -565,3 +565,14 @@ table.tt.tr { min-width: 0; }
 .wa-btn.lg { font-size: .9rem; padding: .45em 1em .45em .8em; }
 .wa-btn.lg .wa-ic { width: 18px; height: 18px; }
 .t-phone { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; font-size: .82rem; margin-top: .15rem; }
+
+/* صفحة رابط الجدول */
+.share-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.share-head h1 { margin: 0; font-size: 1.5rem; }
+.share-head .btn [data-ic] { display: inline-grid; }
+.share-sheet { position: relative; overflow: hidden; background: #fff; border-radius: 14px; box-shadow: var(--shadow); border: 1px solid var(--line); }
+.share-scale { width: 1123px; transform-origin: top right; }
+[dir=ltr] .share-scale { transform-origin: top left; }
+.share-scale .sheet { width: 1123px; }
+.share-page .tp-main { width: min(1180px, 100%); }
+@media (max-width: 640px) { .share-head .row-actions { width: 100%; } .share-head .row-actions .btn { flex: 1; } }

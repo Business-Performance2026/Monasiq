@@ -1,5 +1,5 @@
 // تصميم ورقة الجدول (طباعة + تحميل PDF) — يُستخدم في لوحة المدرسة ولوحة المعلم
-import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611140018";
+import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611140043";
 
 const DAY_EN = { "الأحد": "Sunday", "الاثنين": "Monday", "الثلاثاء": "Tuesday", "الأربعاء": "Wednesday", "الخميس": "Thursday", "الجمعة": "Friday", "السبت": "Saturday" };
 const dayLabel = d => isEn ? (DAY_EN[d] || d) : d;

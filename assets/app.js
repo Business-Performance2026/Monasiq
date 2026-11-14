@@ -2,8 +2,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, APP } from "./config.js?v=202611140018";
-import { initI18n, isEn, tr, t, lang } from "./i18n.js?v=202611140018";
+import { firebaseConfig, APP } from "./config.js?v=202611140043";
+import { initI18n, isEn, tr, t, lang } from "./i18n.js?v=202611140043";
 export { tr, t, isEn, lang };
 export const APP_NAME = isEn ? (APP.nameEn || APP.name) : APP.name;
 export const APP_TAGLINE = isEn ? (APP.taglineEn || APP.tagline) : APP.tagline;

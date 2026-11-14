@@ -58,6 +58,15 @@ service cloud.firestore {
       }
     }
 
+    // روابط جداول المعلمين المرسلة عبر واتساب: تُقرأ بالرابط فقط (بدون قائمة)
+    match /shares/{id} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if isActiveSchool(request.resource.data.schoolId);
+      allow update: if isActiveSchool(resource.data.schoolId) && request.resource.data.schoolId == resource.data.schoolId;
+      allow delete: if isAdmin() || isActiveSchool(resource.data.schoolId);
+    }
+
     // حسابات المعلمين — رقم الوثيقة = رقم حساب المعلم (uid)
     match /teacherAccounts/{uid} {
       // المعلم يرى حسابه، والمدرسة ترى حسابات معلميها، والمدير يرى الكل

@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611140018";
-import { setLang } from "./i18n.js?v=202611140018";
-import { schedule, reconcile } from "./scheduler.js?v=202611140018";
-import { sendTimetableWA, WA_ICON } from "./whatsapp.js?v=202611140018";
-import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js?v=202611140018";
-import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611140018";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611140018";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611140043";
+import { setLang } from "./i18n.js?v=202611140043";
+import { schedule, reconcile } from "./scheduler.js?v=202611140043";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611140043";
+import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js?v=202611140043";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611140043";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611140043";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -628,12 +628,19 @@ function vTeachers() {
 }
 // رقم المعلم: من بياناته، أو من حسابه في المنصة
 const teacherPhone = t => t?.phone || S.accounts.find(a => a.teacherId === t?.id && a.phone)?.phone || "";
-async function waTeacher(t) {
+function waTeacher(t) {
   const phone = teacherPhone(t);
   if (!phone) return toast("لا يوجد رقم هاتف لهذا المعلم", "error");
   if (!TT.lessons) ttSync();
   if (!TT.lessons.some(x => x.t === t.id && x.d != null)) return toast("لا يوجد جدول موزّع لهذا المعلم بعد", "error");
-  await sendTimetableWA({ name: t.name, phone, sheet: sheetFor("teacher", t.id) });
+  // حفظ نسخة من جدول المعلم في رابط عام خاص به (نفس الرابط لكل مرة)
+  const save = async () => {
+    let id = t.shareId;
+    if (!id) { id = newShareId(); await updateDoc(dref("teachers", t.id), { shareId: id }); t.shareId = id; }
+    await setDoc(doc(db, "shares", id), { schoolId: SID, teacherId: t.id, name: t.name, sheet: sheetToDoc(sheetFor("teacher", t.id)), lang: isEn ? "en" : "ar", updatedAt: serverTimestamp() });
+    return id;
+  };
+  sendTimetableLink({ name: t.name, phone, save }).catch(e => toast(errMsg(e), "error"));
 }
 const waBtn = (t, extra = "") => teacherPhone(t) ? `<button type="button" class="wa-btn ${extra}" data-act="wa" title="${esc(tr("إرسال الجدول عبر واتساب"))}">${WA_ICON}<span>${tr("واتساب")}</span></button>` : "";
 function teacherRow(t) {

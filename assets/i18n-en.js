@@ -289,5 +289,9 @@ export const EN = {
   "جدول {0}": "Timetable - {0}", "جارٍ تجهيز ملف الجدول": "Preparing timetable file",
   "ملف جدول {0} جاهز. اضغط «إرسال» ثم اختر واتساب والمعلم.": "{0}'s timetable is ready. Tap “Send”, then choose WhatsApp and the teacher.",
   "تم تحميل ملف الجدول وفتح محادثة المعلم في واتساب. أرفق الملف في المحادثة ثم أرسل.": "The timetable file was downloaded and the teacher's WhatsApp chat was opened. Attach the file in the chat and send.",
-  "لا يوجد رقم هاتف لهذا المعلم": "This teacher has no phone number", "لا يوجد جدول موزّع لهذا المعلم بعد": "This teacher has no scheduled timetable yet"
+  "لا يوجد رقم هاتف لهذا المعلم": "This teacher has no phone number", "لا يوجد جدول موزّع لهذا المعلم بعد": "This teacher has no scheduled timetable yet",
+  "السلام عليكم تفضل أستاذ {0} هذا جدولك": "Hello {0}, here is your timetable:",
+  "تم فتح محادثة المعلم في واتساب والرسالة جاهزة مع رابط جدوله": "The teacher's WhatsApp chat is open with the message and timetable link ready",
+  "الرابط غير صالح": "Invalid link", "تأكد من الرابط أو اطلب من إدارة المدرسة إرساله مرة أخرى.": "Check the link or ask the school to send it again.",
+  "آخر تحديث: {0}": "Last updated: {0}"
 };
