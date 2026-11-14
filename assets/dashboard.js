@@ -1,11 +1,12 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141734";
-import { setLang } from "./i18n.js?v=202611141734";
-import { schedule, reconcile } from "./scheduler.js?v=202611141734";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141734";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141734";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141734";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141734";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141748";
+import { setLang } from "./i18n.js?v=202611141748";
+import { schedule, reconcile } from "./scheduler.js?v=202611141748";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141748";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141748";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141748";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141748";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141748";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -268,13 +269,19 @@ function vSettings() {
     </form>
   </div>
   <div class="card">
-    <h3>استيراد وتصدير البيانات</h3>
-    <p class="muted" style="margin-top:0">استورد المعلمين والصفوف والشعب والمواد والحصص دفعة واحدة من ملف PDF لجداول المعلمين (مثل جداول aSc) أو من ملف بيانات JSON، أو صدّر بيانات مدرستك.</p>
-    <div class="field"><label>ملف PDF أو JSON</label><input type="file" id="impFile" accept=".json,.pdf,application/json,application/pdf"></div>
+    <h3>استيراد البيانات</h3>
+    <p class="muted" style="margin-top:0">استورد المعلمين والصفوف والشعب والمواد دفعة واحدة من ملف Excel (سطر لكل معلم ومادة وشعبة) أو من ملف PDF لجداول المعلمين (مثل جداول aSc).</p>
+    <div class="field"><label>ملف Excel أو PDF</label><input type="file" id="impFile" accept=".xlsx,.xls,.csv,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></div>
+    <p class="muted imp-hint">ملف Excel: الأعمدة هي المعلم، المادة، الشعبة (مثل 5/12)، عدد الحصص، ورقم الجوال والنصاب اختياريًا. <a href="#" id="xlsTpl">تحميل نموذج Excel</a></p>
     <label class="check" style="margin-bottom:1rem"><input type="checkbox" id="impReplace" checked> حذف البيانات الحالية قبل الاستيراد</label>
     <div class="row-actions">
       <button class="btn primary" id="impBtn"><span data-ic="upload" data-size="18"></span>استيراد</button>
-      <button class="btn" id="expBtn"><span data-ic="download" data-size="18"></span>تصدير البيانات JSON</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>تحميل الجداول</h3>
+    <p class="muted" style="margin-top:0">ملف PDF واحد فيه كل الجداول، 6 جداول في كل صفحة.</p>
+    <div class="row-actions">
       <button class="btn" id="expPdfT"><span data-ic="download" data-size="18"></span>تحميل جداول المعلمين PDF</button>
       <button class="btn" id="expPdfS"><span data-ic="download" data-size="18"></span>تحميل جداول الشعب PDF</button>
     </div>
@@ -370,16 +377,20 @@ BIND.settings = v => {
       } catch (ex) { console.error(ex); }
       delete $("modalBack").dataset.lock; closeModal();
       if (!data || !data.timetable?.length) return toast("لم يتم العثور على جداول يمكن قراءتها في هذا الملف. تأكد أن الملف PDF نصي (غير ممسوح ضوئيًا) ويحتوي جداول المعلمين.", "error");
-    } else {
-      try { data = JSON.parse(await f.text()); } catch { return toast("الملف غير صالح", "error"); }
-      if (data.format !== "monasiq-import") return toast("الملف غير صالح", "error");
-    }
+    } else if (/\.(xlsx|xls|csv)$/i.test(f.name)) {
+      let r;
+      try { toast(tr("جارٍ قراءة الملف")); r = await parseExcel(f); } catch (ex) { console.error(ex); return toast("تعذّر قراءة ملف Excel", "error"); }
+      if (r.error === "header") return toast("لم نجد أعمدة «المعلم» و«المادة» و«الشعبة» في الملف. حمّل النموذج واستخدمه.", "error");
+      if (r.error) return toast("لا توجد بيانات صالحة في الملف", "error");
+      data = r.data; warnings = r.warnings;
+      extra = tf("تمت قراءة {0} سطر من ورقة «{1}». بعد الاستيراد اضغط «توزيع تلقائي» في صفحة الجدول.", r.stats.rows, r.stats.sheet);
+    } else return toast("اختر ملف Excel أو PDF", "error");
     const ok = await importPreview(data, warnings, extra, replace);
     if (ok) await importData(data, replace);
   };
+  $("xlsTpl").onclick = e => { e.preventDefault(); downloadTemplate(null, tr("نموذج بيانات المدرسة")).catch(() => toast("تعذّر إنشاء الملف", "error")); };
   $("expPdfT").onclick = () => downloadAll("teacher");
   $("expPdfS").onclick = () => downloadAll("section");
-  $("expBtn").onclick = exportData;
   $("infoForm").onsubmit = async e => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target).entries());
@@ -400,9 +411,9 @@ function importPreview(data, warnings, extra, replace) {
         <div><b>${n("teachers")}</b><span>${tr("المعلمون")}</span></div>
         <div><b>${n("sections")}</b><span>${tr("الشعب")}</span></div>
         <div><b>${n("subjects")}</b><span>${tr("المواد")}</span></div>
-        <div><b>${n("timetable")}</b><span>${tr("حصص الجدول")}</span></div>
+        ${n("timetable") ? `<div><b>${n("timetable")}</b><span>${tr("حصص الجدول")}</span></div>` : `<div><b>${(data.teachers || []).reduce((a, t) => a + (t.assignments || []).reduce((x, y) => x + (+y.periods || 0), 0), 0)}</b><span>${tr("حصة مُسندة")}</span></div>`}
       </div>
-      <p class="muted">${esc(tr("الصفوف"))}: ${(data.grades || []).map(g => esc(g.name)).join("، ")} · ${esc(tr("أيام الدوام"))}: ${(data.settings?.days || []).length} · ${esc(tr("الحصص اليومية"))}: ${data.settings?.periods?.length || data.settings?.periodsCount || "-"}</p>
+      <p class="muted">${esc(tr("الصفوف"))}: ${(data.grades || []).map(g => esc(g.name)).join("، ")} · ${data.settings ? `${esc(tr("أيام الدوام"))}: ${(data.settings.days || []).length} · ${esc(tr("الحصص اليومية"))}: ${data.settings.periods?.length || data.settings.periodsCount || "-"}` : ""}</p>
       <details class="imp-more"><summary>${tr("المواد")}</summary><p>${(data.subjects || []).map(s => `<span class="chip"><span class="dot" style="background:${s.color}"></span>${esc(s.name)}</span>`).join("")}</p></details>
       <details class="imp-more"><summary>${tr("المعلمون")}</summary><p>${(data.teachers || []).map(t => `<span class="chip">${esc(t.name)} <b>${t.maxLoad || ""}</b></span>`).join("")}</p></details>
       ${warnings.length ? `<div class="notice warn"><b>${tr("ملاحظات")}:</b><ul>${warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
@@ -481,26 +492,6 @@ async function importData(data, replace) {
     closeModal();
     toast(errMsg(e), "error");
   }
-}
-function exportData() {
-  ttSync();
-  const gk = id => "g_" + id, sk = id => "c_" + id, bk = id => "s_" + id, tk = id => "t_" + id;
-  const data = {
-    format: "monasiq-import", version: 1, source: S.school.name, exportedAt: new Date().toISOString(),
-    settings: settings(),
-    grades: S.grades.map(g => ({ key: gk(g.id), name: g.name, code: g.code })),
-    sections: S.sections.map(x => ({ key: sk(x.id), grade: gk(x.gradeId), num: x.num })),
-    subjects: S.subjects.map(x => ({ key: bk(x.id), name: x.name, color: x.color, periods: Object.fromEntries(Object.entries(x.periods || {}).map(([g, n]) => [gk(g), n])) })),
-    teachers: S.teachers.map(t => ({ key: tk(t.id), name: t.name, phone: t.phone || "", subject: t.subjectId ? bk(t.subjectId) : "", maxLoad: num(t.maxLoad),
-      assignments: (t.assignments || []).map(a => ({ subject: bk(a.subjectId), section: sk(a.sectionId), periods: num(a.periods) })) })),
-    timetable: (TT.lessons || []).map(x => ({ teacher: tk(x.t), subject: bk(x.s), section: sk(x.c), d: x.d, p: x.p, l: !!x.l }))
-  };
-  const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `monasiq-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
 // =====================================================

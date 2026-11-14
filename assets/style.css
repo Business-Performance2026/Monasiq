@@ -702,3 +702,4 @@ table.tt.tr { min-width: 0; }
 .ld-count:empty { display: none; }
 @media (max-width: 640px) { .ld-head { padding: 1rem; } .ld-body { padding: .8rem 1rem 1rem; } .ld-head .muted { display: none; } }
 
+.imp-hint { font-size: .85rem; margin: -.4rem 0 .8rem; }
