@@ -41,11 +41,52 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
     }
   }
 
+  // ---- قيود الشعب ----
+  const cBlock = new Uint8Array(nC * N);
+  const ownerT = new Int32Array(nC * D).fill(-1), ownerQuota = new Int32Array(nC * D), ownerRest = new Uint8Array(nC * D);
+  const ownerOf = new Map();                  // (ti,ci) -> {d, quota}
+  const tOwnDay = new Map();                  // (ti,d) -> {ci, quota}
+  const exDay = new Int32Array(nK).fill(-1), exCap = new Int32Array(nK);
+  if (rules?.sections) {
+    for (const [cid, ci] of cM) {
+      const r = rules.sections[cid]; if (!r) continue;
+      for (const s of r.blocked.keys()) if (s < N) cBlock[ci * N + s] = 1;
+      for (const o of r.owners) {
+        const ti = tM.get(o.t); if (ti === undefined || !o.quota) continue;
+        const od = ci * D + o.d;
+        ownerT[od] = ti; ownerQuota[od] = o.quota; ownerRest[od] = o.rest === "free" ? 1 : 2;
+        ownerOf.set(ti * nC + ci, { d: o.d, quota: o.quota });
+        tOwnDay.set(ti * D + o.d, { ci, quota: o.quota });
+      }
+    }
+    // الأيام المتاحة فعليًا للشعبة (بعد الأيام الفارغة والأيام المخصصة لمعلم) — قاعدة التوزيع اليومي تُحسب عليها
+    const cDays = new Int32Array(nC).fill(D);
+    for (let ci = 0; ci < nC; ci++) {
+      let lost = 0;
+      for (let d = 0; d < D; d++) {
+        let all = true; for (let p = 0; p < P; p++) if (!cBlock[ci * N + d * P + p]) { all = false; break; }
+        if (all || ownerRest[ci * D + d] === 1 || (ownerT[ci * D + d] >= 0 && ownerQuota[ci * D + d] >= P)) lost++;
+      }
+      cDays[ci] = Math.max(1, D - lost);
+    }
+    const kCi = new Int32Array(nK); L.forEach(l => { kCi[l.ki] = l.ci; });
+    for (let k = 0; k < nK; k++) {
+      const dd = cDays[kCi[k]]; if (dd === D) continue;
+      const n = kCount[k], f = Math.floor(n / dd), r = n - dd * f;
+      cap[k] = Math.max(1, Math.ceil(n / dd)); capDays[k] = r === 0 ? dd : r;
+    }
+    // استثناء قاعدة التوزيع اليومي لحصص المعلم صاحب اليوم
+    L.forEach(l => {
+      const own = ownerOf.get(l.ti * nC + l.ci);
+      if (own && exDay[l.ki] < 0) { exDay[l.ki] = own.d; exCap[l.ki] = Math.max(1, Math.ceil((kCount[l.ki] - own.quota) / Math.max(1, D - 1))); }
+    });
+  }
+
   const fixedSlot = new Int32Array(nL).fill(-1);
   lessons.forEach((x, i) => {
     if (!x.l || x.d == null || x.p == null || x.d >= D || x.p >= P) return;
     const s = x.d * P + x.p;
-    if (!gBlock[s] && !tBlock[L[i].ti * N + s]) fixedSlot[i] = s;
+    if (!gBlock[s] && !tBlock[L[i].ti * N + s] && !cBlock[L[i].ci * N + s]) fixedSlot[i] = s;
   });
   const lockedDropped = lessons.filter((x, i) => x.l && x.d != null && fixedSlot[i] < 0).length;
 
@@ -77,6 +118,8 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
     const tPC = new Int32Array(nT * P);      // عدد مرات كل حصة للمعلم
     const dbl = new Int32Array(nT);          // عدد الحصص المزدوجة المتكوّنة
     const kAtCap = new Int32Array(nK);       // عدد الأيام التي وصلت فيها المادة للحد الأعلى
+    const oCnt = new Int32Array(nC * D);     // حصص المعلم صاحب اليوم في يومه
+    const cNon = new Int32Array(nC * D);     // حصص المعلمين الآخرين في يوم مخصص لمعلم
     const pos = new Int32Array(nL).fill(-1);
     const isFixed = new Uint8Array(nL);
     const kicked = new Int32Array(nL);
@@ -93,6 +136,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
       if (mode[l.ti] === 1) dbl[l.ti] += pairAt(l.ti, l.ki, s);
       tB[l.ti * N + s] = i; cB[l.ci * N + s] = i;
       if (++kD[l.ki * D + d] === cap[l.ki]) kAtCap[l.ki]++;
+      { const od = l.ci * D + d; if (ownerT[od] >= 0) { if (ownerT[od] === l.ti) oCnt[od]++; else cNon[od]++; } }
       tD[l.ti * D + d]++; tPC[l.ti * P + s % P]++; pos[i] = s;
     };
     const unplace = i => {
@@ -100,6 +144,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
       const l = L[i], d = (s / P) | 0;
       tB[l.ti * N + s] = -1; cB[l.ci * N + s] = -1;
       if (kD[l.ki * D + d]-- === cap[l.ki]) kAtCap[l.ki]--;
+      { const od = l.ci * D + d; if (ownerT[od] >= 0) { if (ownerT[od] === l.ti) oCnt[od]--; else cNon[od]--; } }
       tD[l.ti * D + d]--; tPC[l.ti * P + s % P]--; pos[i] = -1;
       if (mode[l.ti] === 1) dbl[l.ti] -= pairAt(l.ti, l.ki, s);
     };
@@ -107,14 +152,24 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
     // القيود الثابتة (بدون النظر لانشغال الخانة نفسها). occ: الحصص الموجودة في الخانة والتي ستُزاح
     const hardOK = (i, s, occ = []) => {
       const l = L[i], ti = l.ti;
-      if (gBlock[s] || tBlock[ti * N + s]) return false;
+      if (gBlock[s] || tBlock[ti * N + s] || cBlock[l.ci * N + s]) return false;
       const p = s % P, d = (s / P) | 0;
       let minus = 0, minusK = 0;
       for (const j of occ) { if (j < 0) continue; if (L[j].ti === ti) minus++; if (L[j].ki === l.ki) minusK++; }
+      // يوم مخصص لمعلم معيّن مع هذه الشعبة
+      const od = l.ci * D + d, ow = ownerT[od];
+      if (ow >= 0 && ow !== ti) { if (ownerRest[od] === 1) return false; if (cNon[od] + 1 > P - ownerQuota[od]) return false; }
+      const mineOwn = ownerOf.get(ti * nC + l.ci);
+      if (mineOwn && mineOwn.d !== d && oCnt[l.ci * D + mineOwn.d] < mineOwn.quota) return false;
+      // المعلم صاحب يوم مع شعبة أخرى: يبقى متاحًا لها
+      const td = tOwnDay.get(ti * D + d);
+      if (td && td.ci !== l.ci && tD[ti * D + d] - oCnt[td.ci * D + d] + 1 > P - td.quota) return false;
+      if (td && td.ci !== l.ci && ownerRest[td.ci * D + d] === 1 && p < td.quota) return false;
       // التوزيع اليومي للمادة في الشعبة
       const orig = kD[l.ki * D + d], kd = orig - minusK;
       const isDouble = mode[ti] === 1 && dbl[ti] < dblTarget[ti] && pairAt(ti, l.ki, s) > 0;
-      if (isDouble) { if (kd + 1 > cap[l.ki] + 1) return false; }
+      if (exDay[l.ki] >= 0) { if (d !== exDay[l.ki] && kd + 1 > exCap[l.ki]) return false; }
+      else if (isDouble) { if (kd + 1 > cap[l.ki] + 1) return false; }
       else {
         if (kd + 1 > cap[l.ki]) return false;
         const atCap = kAtCap[l.ki] - (orig >= cap[l.ki] ? 1 : 0) + (kd + 1 >= cap[l.ki] ? 1 : 0);
@@ -199,7 +254,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
     const w = new Float64Array(nL);
     for (const i of queue) {
       const l = L[i];
-      w[i] = tLoad[l.ti] / tFree[l.ti] * 2 + cLoad[l.ci] / N + (maxRun[l.ti] ? 0.3 : 0) + (mode[l.ti] === 1 ? 0.2 : 0) + Math.random() * 0.35;
+      w[i] = (ownerOf.has(l.ti * nC + l.ci) ? 3 : 0) + tLoad[l.ti] / tFree[l.ti] * 2 + cLoad[l.ci] / N + (maxRun[l.ti] ? 0.3 : 0) + (mode[l.ti] === 1 ? 0.2 : 0) + Math.random() * 0.35;
     }
     queue.sort((a, b) => w[b] - w[a]);
 

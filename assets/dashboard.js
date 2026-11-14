@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141324";
-import { setLang } from "./i18n.js?v=202611141324";
-import { schedule, reconcile } from "./scheduler.js?v=202611141324";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141324";
-import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js?v=202611141324";
-import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141324";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141324";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141400";
+import { setLang } from "./i18n.js?v=202611141400";
+import { schedule, reconcile } from "./scheduler.js?v=202611141400";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141400";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141400";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141400";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141400";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -468,11 +468,66 @@ function vGrades() {
           <button class="btn sm" data-act="editGrade">تعديل</button>
           <button class="btn sm danger" data-act="delGrade">حذف</button>
         </div></div>
-      <div>${secs.map(s => `<span class="sec-chip">${esc(secLabel(s))}<button title="حذف" data-act="delSec" data-s="${s.id}">×</button></span>`).join("") || "<span class='muted'>لا توجد شعب</span>"}</div>
+      <div>${secs.map(s => `<span class="sec-chip ${secHasRules(s) ? "has-rules" : ""}" data-act="secRules" data-s="${s.id}" title="${esc(secRulesSummary(s) || tr("اضغط لإضافة قيود للشعبة"))}">${secHasRules(s) ? `<span data-ic="lock" data-size="12"></span>` : ""}${esc(secLabel(s))}<button title="حذف" data-act="delSec" data-s="${s.id}">×</button></span>`).join("") || "<span class='muted'>لا توجد شعب</span>"}</div>
     </div>`;
   }).join("") : `<div class="card empty"><div class="big">🏷️</div>أضف أول صف من النموذج أعلاه</div>`}`;
 }
+const secHasRules = s => !!((s.rules?.free || []).length || (s.rules?.days || []).length);
+function secRulesSummary(s) {
+  const r = s.rules || {}, out = [];
+  (r.free || []).forEach(m => out.push(tf("فارغة: {0}", slotLabel(m))));
+  (r.days || []).forEach(o => out.push(tf("{0}: يوم كامل مع {1}", tr(settings().days[o.d] || ""), shortName(teacherOf(o.t)?.name))));
+  return out.join(" · ");
+}
+function sectionModal(sec) {
+  const label = secLabel(sec), st = settings(), P = st.periods.length;
+  const free = (sec.rules?.free || []).map(m => ({ ...m }));
+  const days = (sec.rules?.days || []).map(o => ({ ...o }));
+  const tList = S.teachers.map(t => ({ t, n: (t.assignments || []).filter(a => a.sectionId === sec.id).reduce((x, a) => x + num(a.periods), 0) })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
+  const total = tList.reduce((x, y) => x + y.n, 0);
+  openModal(`${modalHead(esc(tf("قيود الشعبة {0}", label)))}
+    <p class="muted" style="margin-top:0">${esc(tf("{0} حصة أسبوعيًا مع {1} معلم.", total, tList.length))}</p>
+    <label>${tr("أوقات فارغة للشعبة")} <small class="muted">(${tr("يوم كامل أو حصص محددة لا توضع فيها أي حصة")})</small></label>
+    <div id="secFree"></div>
+    <label style="margin-top:1.1rem">${tr("يوم كامل لمعلم معيّن")} <small class="muted">(${tr("مثل معلم السياحة")})</small></label>
+    <div id="secDays"></div>
+    <div class="modal-actions"><button class="btn primary" id="secSave">💾 ${tr("حفظ")}</button><button type="button" class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+  fillIcons($("modal"));
+  const drawFree = () => { $("secFree").innerHTML = slotPicker("secFreeList", free, true); bindSlots($("secFree"), free, drawFree); };
+  const drawDays = () => {
+    $("secDays").innerHTML = `<div class="own-list">${days.map((o, i) => {
+      const n = tList.find(x => x.t.id === o.t)?.n || 0, q = Math.min(n, P);
+      const note = !o.t ? "" : n === 0 ? tr("هذا المعلم لا يدرّس هذه الشعبة") : n >= P ? tf("يأخذ اليوم كاملًا ({0} حصص)، والباقي ({1}) يتوزع على الأيام الأخرى", P, n - P)
+        : (o.rest === "others" ? tf("يأخذ {0} حصص، ويكمل باقي اليوم معلمون آخرون", q) : tf("يأخذ الحصص 1-{0} ثم ينصرف الطلاب", q));
+      return `<div class="own-row" data-i="${i}">
+        <select data-k="d">${st.days.map((dn, di) => `<option value="${di}" ${o.d === di ? "selected" : ""}>${esc(dn)}</option>`).join("")}</select>
+        <select data-k="t"><option value="">${tr("— اختر المعلم —")}</option>${tList.map(x => `<option value="${x.t.id}" ${o.t === x.t.id ? "selected" : ""}>${esc(x.t.name)} (${esc(tf("{0} حصص", x.n))})</option>`).join("")}</select>
+        <select data-k="rest"><option value="free" ${o.rest !== "others" ? "selected" : ""}>${tr("الحصص المتبقية: ينصرف الطلاب")}</option><option value="others" ${o.rest === "others" ? "selected" : ""}>${tr("الحصص المتبقية: يكملها معلمون آخرون")}</option></select>
+        <button type="button" class="btn sm danger" data-rm>×</button>
+        ${note ? `<small class="own-note">${esc(note)}</small>` : ""}
+      </div>`;
+    }).join("")}</div>
+    <button type="button" class="btn sm" id="ownAdd">+ ${tr("إضافة يوم لمعلم")}</button>`;
+    $("ownAdd").onclick = () => { const used = new Set(days.map(o => o.d)); const d = st.days.findIndex((_, i) => !used.has(i)); days.push({ d: d < 0 ? 0 : d, t: tList[0]?.t.id || "", rest: "free" }); drawDays(); };
+    $("secDays").querySelectorAll(".own-row").forEach(row => {
+      const o = days[+row.dataset.i];
+      row.querySelectorAll("select").forEach(sel => sel.onchange = () => { o[sel.dataset.k] = sel.dataset.k === "d" ? +sel.value : sel.value; drawDays(); });
+      row.querySelector("[data-rm]").onclick = () => { days.splice(+row.dataset.i, 1); drawDays(); };
+    });
+  };
+  drawFree(); drawDays();
+  $("secSave").onclick = async () => {
+    const clean = days.filter(o => o.t);
+    if (new Set(clean.map(o => o.d)).size !== clean.length) return toast("لا يمكن تخصيص نفس اليوم لأكثر من معلم", "error");
+    if (clean.some(o => free.some(f => f.d === o.d && f.p === -1))) return toast("لا يمكن أن يكون اليوم فارغًا ومخصصًا لمعلم في نفس الوقت", "error");
+    try {
+      await updateDoc(dref("sections", sec.id), { rules: { free, days: clean.map(o => ({ d: o.d, t: o.t, rest: o.rest === "others" ? "others" : "free" })) } });
+      closeModal(); toast("تم حفظ قيود الشعبة", "success");
+    } catch (ex) { toast(errMsg(ex), "error"); }
+  };
+}
 BIND.grades = v => {
+  fillIcons(v);
   const f = $("gradeForm");
   f.name.oninput = () => { const i = GRADE_NAMES.indexOf(f.name.value.trim()); if (i >= 0) f.code.value = i + 1; };
   f.onsubmit = async e => {
@@ -493,6 +548,7 @@ BIND.grades = v => {
     const b = e.target.closest("[data-act]"); if (!b) return;
     const gid = b.closest("[data-g]")?.dataset.g, g = grade(gid);
     const act = b.dataset.act;
+    if (act === "secRules") return sectionModal(section(b.dataset.s));
     try {
       if (act === "addSec") {
         const nums = S.sections.filter(s => s.gradeId === gid).map(s => num(s.num));
@@ -820,13 +876,13 @@ function teacherModal(t) {
 const DEPT_COLORS = ["#0f766e", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#ca8a04", "#16a34a", "#0891b2", "#be123c", "#475569"];
 const deptOf = id => S.departments.find(d => d.id === id);
 const deptsOfTeacher = t => teacherDepts(t, S.departments);
-const slotLabel = m => `${tr(settings().days[m.d] || "")} · ${tf("الحصة {0}", m.p + 1)}`;
-function slotPicker(listId, slots) {
+const slotLabel = m => `${tr(settings().days[m.d] || "")} · ${m.p === -1 ? tr("اليوم كامل") : tf("الحصة {0}", m.p + 1)}`;
+function slotPicker(listId, slots, wholeDay = false) {
   const st = settings();
   return `<div class="slot-list" id="${listId}">${slots.map((m, i) => `<span class="chip slot-chip">${esc(slotLabel(m))}<button type="button" data-rm-slot="${i}">×</button></span>`).join("") || `<span class="muted">${tr("لا يوجد")}</span>`}</div>
     <div class="slot-add">
       <select data-slot-d>${st.days.map((d, i) => `<option value="${i}">${esc(d)}</option>`).join("")}</select>
-      <select data-slot-p>${st.periods.map((_, i) => `<option value="${i}">${esc(tf("الحصة {0}", i + 1))}</option>`).join("")}</select>
+      <select data-slot-p>${wholeDay ? `<option value="-1">${tr("اليوم كامل")}</option>` : ""}${st.periods.map((_, i) => `<option value="${i}">${esc(tf("الحصة {0}", i + 1))}</option>`).join("")}</select>
       <button type="button" class="btn sm" data-add-slot>+ ${tr("إضافة")}</button>
     </div>`;
 }
@@ -834,7 +890,8 @@ function slotPicker(listId, slots) {
 function bindSlots(root, slots, redraw) {
   root.querySelector("[data-add-slot]").onclick = () => {
     const d = +root.querySelector("[data-slot-d]").value, p = +root.querySelector("[data-slot-p]").value;
-    if (!slots.some(m => m.d === d && m.p === p)) slots.push({ d, p });
+    if (p === -1) { for (let i = slots.length - 1; i >= 0; i--) if (slots[i].d === d) slots.splice(i, 1); }
+    if (!slots.some(m => m.d === d && (m.p === p || m.p === -1))) slots.push({ d, p });
     slots.sort((a, b) => a.d - b.d || a.p - b.p); redraw();
   };
   root.querySelectorAll("[data-rm-slot]").forEach(b => b.onclick = () => { slots.splice(+b.dataset.rmSlot, 1); redraw(); });
@@ -918,7 +975,7 @@ function ttSync() {
   if (TT.lessons.length !== before) TV.sel = null;
   if (TV.sel != null && !TT.lessons[TV.sel]) TV.sel = null;
 }
-function ttRules() { return buildRules({ settings: settings(), departments: S.departments, teachers: S.teachers }); }
+function ttRules() { return buildRules({ settings: settings(), departments: S.departments, teachers: S.teachers, sections: S.sections }); }
 function ttIndex() {
   const tS = new Map(), cS = new Map(), slots = new Map();
   if (!TT.lessons) ttSync();
@@ -930,12 +987,13 @@ function ttIndex() {
     slots.get(x.t).add(x.d * P + x.p);
   });
   const rules = ttRules();
-  const kN = new Map(), kDay = new Map();
+  const kN = new Map(), kDay = new Map(), cdT = new Map();
   TT.lessons.forEach(x => {
+    if (x.d != null) { const kk = x.c + "@" + x.d; if (!cdT.has(kk)) cdT.set(kk, new Map()); const m = cdT.get(kk); m.set(x.t, (m.get(x.t) || 0) + 1); }
     const k = x.c + "|" + x.s; kN.set(k, (kN.get(k) || 0) + 1);
     if (x.d != null) { const kk = k + "@" + x.d; kDay.set(kk, (kDay.get(kk) || 0) + 1); }
   });
-  return { tS, cS, slots, rules, kN, kDay };
+  return { tS, cS, slots, rules, kN, kDay, cdT };
 }
 const DAY_EN = { "الأحد": "Sun", "الاثنين": "Mon", "الثلاثاء": "Tue", "الأربعاء": "Wed", "الخميس": "Thu", "الجمعة": "Fri", "السبت": "Sat" };
 const shortDay = d => isEn ? (DAY_EN[d] || d) : String(d).replace(/^ال/, "");
@@ -975,8 +1033,8 @@ function ruleCheck(idx, teacherId, d, p, remove = [], add = []) {
   return slotViolation(idx.rules, teacherId, d, p, set, tf);
 }
 // قاعدة التوزيع اليومي: حصص نفس المادة لنفس الشعبة تتوزع بالتساوي على أيام الأسبوع
-function dailyLimits(n) {
-  const { D } = ttDims();
+function dailyLimits(n, c, idx) {
+  const D = c && idx ? sectionDays(idx.rules, c) : ttDims().D;
   const cap = Math.max(1, Math.ceil(n / D)), f = Math.floor(n / D), r = n - D * f;
   return { cap, allowDays: cap > f ? r : D };
 }
@@ -984,8 +1042,9 @@ function dailyLimits(n) {
 function dailyViolation(idx, x, d, excludeSameDay = 0) {
   if (x.d === d) return null;
   const { D } = ttDims();
+  if (idx.rules.sections?.[x.c]?.owners.some(o => o.t === x.t)) return null; // صاحب يوم مخصص
   const k = x.c + "|" + x.s, n = idx.kN.get(k) || 0;
-  const { cap, allowDays } = dailyLimits(n);
+  const { cap, allowDays } = dailyLimits(n, x.c, idx);
   const cnt = dd => (idx.kDay.get(k + "@" + dd) || 0) - (dd === x.d ? 1 : 0) - (dd === d ? excludeSameDay : 0);
   const target = cnt(d) + 1;
   const r = idx.rules.teachers[x.t];
@@ -1008,12 +1067,21 @@ function dailyViolators(idx) {
   for (const [k, list] of byK) {
     const t = TT.lessons[list[0]].t;
     if (idx.rules.teachers[t]?.mode === "double") continue;
-    const { cap, allowDays } = dailyLimits(idx.kN.get(k) || 0);
+    const c0 = TT.lessons[list[0]].c;
+    if (idx.rules.sections?.[c0]?.owners.some(o => o.t === t)) continue;
+    const { cap, allowDays } = dailyLimits(idx.kN.get(k) || 0, c0, idx);
     const per = new Map(); list.forEach(i => { const d = TT.lessons[i].d; per.set(d, (per.get(d) || 0) + 1); });
     const atCap = [...per.values()].filter(v => v >= cap).length;
     list.forEach(i => { const v = per.get(TT.lessons[i].d); if (v > cap || (cap > 1 && v >= cap && atCap > allowDays) || (cap === 1 && v > 1)) bad.add(i); });
   }
   return bad;
+}
+function secCheck(idx, x, d, p, excl = []) {
+  const counts = {
+    owner: (c, dd) => { const own = idx.rules.sections[c]?.owners.find(o => o.d === dd); if (!own) return 0; return (idx.cdT.get(c + "@" + dd)?.get(own.t) || 0) - excl.filter(e => e.c === c && e.d === dd && e.t === own.t).length; },
+    nonOwner: (c, dd) => { const own = idx.rules.sections[c]?.owners.find(o => o.d === dd); const m = idx.cdT.get(c + "@" + dd); if (!m) return 0; let n = 0; m.forEach((v, t) => { if (t !== own?.t) n += v; }); return n - excl.filter(e => e.c === c && e.d === dd && e.t !== own?.t).length; }
+  };
+  return sectionViolation(idx.rules, x, d, p, counts, tf, { section: c => secLabel(section(c)), teacher: t => shortName(teacherOf(t)?.name), day: dd => tr(settings().days[dd] || "") });
 }
 function canMove(i, d, p, idx) {
   const L = TT.lessons[i];
@@ -1022,7 +1090,7 @@ function canMove(i, d, p, idx) {
   const from = L.d != null ? L.d * P + L.p : -1, to = d * P + p;
   const a = idx.tS.get(`${L.t}@${d}.${p}`), b = idx.cS.get(`${L.c}@${d}.${p}`);
   if (a == null && b == null) {
-    const v = ruleCheck(idx, L.t, d, p, from >= 0 ? [from] : []) || dailyViolation(idx, L, d);
+    const v = ruleCheck(idx, L.t, d, p, from >= 0 ? [from] : []) || secCheck(idx, L, d, p, [L]) || dailyViolation(idx, L, d);
     return v ? { ok: false, reason: v } : { ok: true };
   }
   if (a != null && b != null && a !== b) {
@@ -1036,6 +1104,7 @@ function canMove(i, d, p, idx) {
   // تبديل: هل تستطيع الحصة j الذهاب إلى مكان L؟
   const ta = idx.tS.get(`${J.t}@${L.d}.${L.p}`), cb = idx.cS.get(`${J.c}@${L.d}.${L.p}`);
   if ((ta == null || ta === i) && (cb == null || cb === i)) {
+    { const v = secCheck(idx, L, d, p, [L, J]) || secCheck(idx, J, L.d, L.p, [L, J]); if (v) return { ok: false, reason: v }; }
     if (L.c + "|" + L.s !== J.c + "|" + J.s && L.d !== d) {
       const v = dailyViolation(idx, L, d, J.c === L.c && J.s === L.s ? 1 : 0) || dailyViolation(idx, J, L.d);
       if (v) return { ok: false, reason: v };
@@ -1156,7 +1225,9 @@ function ttGridHTML(mode, id, opts = {}) {
       data += ` data-i="${i}"`;
     }
     const sl = d * P + p;
+    const sb = mode === "section" ? idx.rules.sections?.[id]?.blocked.get(sl) : null;
     const blk = idx.rules.globalBlocked.has(sl) ? tr("فارغة للجميع")
+      : sb ? tr(sb === "dismiss" ? "انصراف" : "فارغة للشعبة")
       : (mode === "teacher" && idx.rules.teachers[id]?.meetings.has(sl) ? tf("اجتماع {0}", idx.rules.teachers[id].meetings.get(sl)) : null);
     if (blk) { cls += i != null ? " viol" : " blk"; if (i == null) inner = `<div class="blk-l"><span data-ic="lock" data-size="12"></span>${esc(blk)}</div>`; }
     if (sel != null && i !== sel) {
@@ -1302,7 +1373,7 @@ function precheckModal(issues) {
       <p style="margin-top:0">${tr("بعض القيود لا يمكن تحقيقها بالكامل، وستبقى حصص بدون مكان:")}</p>
       <div class="notice warn"><ul>${issues.slice(0, 15).map(x => `<li>${esc(x.k === "teacher"
         ? tf("المعلم {0}: لديه {1} حصة والمتاح له {2} فقط بسبب القيود", teacherOf(x.id)?.name || "", x.need, x.have)
-        : tf("الشعبة {0}: لديها {1} حصة والمتاح {2} فقط (بسبب الحصص الفارغة للجميع)", secLabel(section(x.id)), x.need, x.have))}</li>`).join("")}
+        : tf("الشعبة {0}: لديها {1} حصة والمتاح {2} فقط (بسبب الأوقات الفارغة)", secLabel(section(x.id)), x.need, x.have))}</li>`).join("")}
         ${issues.length > 15 ? `<li>${esc(tf("و{0} أخرى…", issues.length - 15))}</li>` : ""}</ul></div>
       <p class="muted">${tr("يمكنك تخفيف القيود أو تقليل الحصص، أو المتابعة وتوزيع الحصص المتبقية يدويًا.")}</p>
       <div class="modal-actions"><button class="btn primary" data-go>${tr("متابعة التوزيع")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
@@ -1318,6 +1389,7 @@ function sheetFor(mode, id) {
   const rules = ttRules(), { P } = ttDims(), blocked = new Map();
   rules.globalBlocked.forEach(sl => blocked.set(sl, tr("فارغة للجميع")));
   if (mode === "teacher") rules.teachers[id]?.meetings.forEach((name, sl) => { if (!blocked.has(sl)) blocked.set(sl, tf("اجتماع {0}", name)); });
+  if (mode === "section") rules.sections?.[id]?.blocked.forEach((why, sl) => { if (!blocked.has(sl)) blocked.set(sl, tr(why === "dismiss" ? "انصراف" : "فارغة للشعبة")); });
   return buildSheet({ blocked, P,
     kind: mode, ownerId: id,
     title: mode === "teacher" ? (teacherOf(id)?.name || "") : tf("الشعبة {0}", secLabel(section(id))),

@@ -295,5 +295,25 @@ export const EN = {
   "الرابط غير صالح": "Invalid link", "تأكد من الرابط أو اطلب من إدارة المدرسة إرساله مرة أخرى.": "Check the link or ask the school to send it again.",
   "آخر تحديث: {0}": "Last updated: {0}",
   "لا يمكن: الشعبة {0} عندها {1} حصة {2} في هذا اليوم. حصص المادة ({3} أسبوعيًا) تتوزع بالتساوي على الأيام.": "Not allowed: section {0} already has {1} {2} period(s) that day. The subject's periods ({3}/week) must be spread evenly across the days.",
-  "{0} حصة مخالفة لقاعدة التوزيع اليومي (مظللة بالأحمر). اضغط «توزيع تلقائي» لإعادة توزيعها، أو انقلها يدويًا.": "{0} periods break the daily distribution rule (highlighted in red). Press “Auto-schedule” to redistribute them, or move them manually."
+  "{0} حصة مخالفة لقاعدة التوزيع اليومي (مظللة بالأحمر). اضغط «توزيع تلقائي» لإعادة توزيعها، أو انقلها يدويًا.": "{0} periods break the daily distribution rule (highlighted in red). Press “Auto-schedule” to redistribute them, or move them manually.",
+  // قيود الشعب
+  "اليوم كامل": "Whole day", "قيود الشعبة {0}": "Section {0} rules", "{0} حصة أسبوعيًا مع {1} معلم.": "{0} periods per week with {1} teachers.",
+  "أوقات فارغة للشعبة": "Free times for this section", "يوم كامل أو حصص محددة لا توضع فيها أي حصة": "a whole day or specific periods with no lessons",
+  "يوم كامل لمعلم معيّن": "Whole day with one teacher", "مثل معلم السياحة": "e.g. the tourism teacher",
+  "— اختر المعلم —": "— Choose teacher —", "الحصص المتبقية: ينصرف الطلاب": "Remaining periods: students leave", "الحصص المتبقية: يكملها معلمون آخرون": "Remaining periods: other teachers fill them",
+  "إضافة يوم لمعلم": "Add a teacher day", "هذا المعلم لا يدرّس هذه الشعبة": "This teacher doesn't teach this section",
+  "يأخذ اليوم كاملًا ({0} حصص)، والباقي ({1}) يتوزع على الأيام الأخرى": "Takes the whole day ({0} periods); the remaining ({1}) are spread over other days",
+  "يأخذ {0} حصص، ويكمل باقي اليوم معلمون آخرون": "Takes {0} periods; other teachers fill the rest of the day",
+  "يأخذ الحصص 1-{0} ثم ينصرف الطلاب": "Takes periods 1-{0}, then students leave",
+  "لا يمكن تخصيص نفس اليوم لأكثر من معلم": "The same day can't be assigned to more than one teacher",
+  "لا يمكن أن يكون اليوم فارغًا ومخصصًا لمعلم في نفس الوقت": "A day can't be both free and assigned to a teacher",
+  "تم حفظ قيود الشعبة": "Section rules saved", "اضغط لإضافة قيود للشعبة": "Click to add rules for this section",
+  "فارغة: {0}": "Free: {0}", "{0}: يوم كامل مع {1}": "{0}: whole day with {1}",
+  "فارغة للشعبة": "Section free", "انصراف": "Dismissed",
+  "الشعبة {0} تنصرف في هذا الوقت (بعد حصص {1})": "Section {0} is dismissed at this time (after {1}'s periods)",
+  "الشعبة {0} فارغة في هذا الوقت": "Section {0} is free at this time",
+  "يوم {0} مخصص للمعلم {1} مع الشعبة {2}": "{0} is reserved for {1} with section {2}",
+  "يوم {0} محجوز معظمه للمعلم {1} مع الشعبة {2}": "{0} is mostly reserved for {1} with section {2}",
+  "حصص هذا المعلم مع الشعبة {0} يجب أن تكون يوم {1} أولًا": "This teacher's periods with section {0} must be on {1} first",
+  "الشعبة {0}: لديها {1} حصة والمتاح {2} فقط (بسبب الأوقات الفارغة)": "Section {0}: has {1} periods but only {2} slots are available (because of free times)"
 };

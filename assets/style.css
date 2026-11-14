@@ -578,3 +578,14 @@ table.tt.tr { min-width: 0; }
 @media (max-width: 640px) { .share-head .row-actions { width: 100%; } .share-head .row-actions .btn { flex: 1; } }
 .tt-cell.viol .lsn { outline: 2.5px dashed var(--bad); outline-offset: -2px; background: #fee2e2 !important; }
 .viol-note { margin-bottom: .7rem; font-size: .9rem; }
+
+/* قيود الشعب */
+.sec-chip { cursor: pointer; transition: .15s; }
+.sec-chip:hover { background: #ccfbf1; }
+.sec-chip.has-rules { background: #fef3c7; color: #92400e; }
+.sec-chip [data-ic] { display: inline-grid; }
+.own-list { display: flex; flex-direction: column; gap: .5rem; margin-bottom: .6rem; }
+.own-row { display: grid; grid-template-columns: 120px 1fr 1fr 36px; gap: .4rem; align-items: center; background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: .5rem; }
+.own-row select { padding: .45em .5em; font-size: .9rem; }
+.own-note { grid-column: 1 / -1; color: var(--primary); font-weight: 500; }
+@media (max-width: 640px) { .own-row { grid-template-columns: 1fr 36px; } .own-row select[data-k="t"], .own-row select[data-k="rest"] { grid-column: 1 / -1; } }
