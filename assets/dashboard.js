@@ -1,10 +1,10 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js";
-import { setLang } from "./i18n.js";
-import { schedule, reconcile } from "./scheduler.js";
-import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js";
-import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611140003";
+import { setLang } from "./i18n.js?v=202611140003";
+import { schedule, reconcile } from "./scheduler.js?v=202611140003";
+import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js?v=202611140003";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611140003";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611140003";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";

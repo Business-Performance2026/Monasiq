@@ -1,6 +1,6 @@
 // الترجمة: عربي / English
 // النصوص مكتوبة بالعربي في الصفحات، وعند اختيار الإنجليزية تُستبدل تلقائيًا من القاموس EN
-import { EN } from "./i18n-en.js";
+import { EN } from "./i18n-en.js?v=202611140003";
 
 const KEY = "lang";
 let saved = "ar";
