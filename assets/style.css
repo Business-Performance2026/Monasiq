@@ -106,9 +106,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: .95rem; }
 .nav { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 .nav .container { display: flex; align-items: center; justify-content: space-between; height: 68px; gap: 1rem; }
 .logo { display: flex; align-items: center; gap: .55rem; font-weight: 800; font-size: 1.45rem; color: var(--ink); }
-.logo-mark { width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, var(--primary), var(--primary-2)); display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 7px; }
-.logo-mark i { background: rgba(255,255,255,.9); border-radius: 2px; }
-.logo-mark i:nth-child(2) { background: rgba(255,255,255,.45); }
+.logo-mark { width: 42px; height: 42px; object-fit: contain; flex-shrink: 0; display: block; }
+.brand-logo { display: block; width: 150px; height: auto; margin-bottom: 1rem; }
+.auth-logo { display: block; width: 130px; height: auto; margin: 0 auto .6rem; }
 .nav-links { display: flex; gap: 1.4rem; font-weight: 500; }
 .nav-links a { color: var(--ink); }
 .nav-links a:hover { color: var(--primary); }
@@ -199,7 +199,7 @@ footer.site { padding: 2rem 0; text-align: center; color: var(--muted); font-siz
 .topbar, .bottom-nav, .sheet-back { display: none; }
 .page-title { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .8rem; margin-bottom: 1.3rem; }
 .page-title h1 { font-size: 1.55rem; margin: 0; }
-.logo-mark.sm { width: 32px; height: 32px; border-radius: 9px; padding: 6px; flex-shrink: 0; }
+.logo-mark.sm { width: 34px; height: 34px; }
 .icon-btn { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
 .btn .ic, .lang-btn .ic { flex-shrink: 0; }
 
@@ -457,7 +457,7 @@ table.tt.tr { min-width: 0; }
 .sheet-render .sheet.mini { width: 760px; min-height: 0; padding: 10px 10px 8px; }
 .sheet.mini .sh-head { padding: 8px 12px; margin-bottom: 6px; border-radius: 10px; }
 .sheet.mini .sh-brand h2 { font-size: 22px; } .sheet.mini .sh-brand small { font-size: 12px; }
-.sheet.mini .sh-logo { width: 34px; height: 34px; padding: 7px; border-radius: 9px; }
+.sheet.mini .sh-logo { width: 38px; height: 38px; }
 .sheet.mini .sh-stats div { padding: 3px 8px; min-width: 52px; } .sheet.mini .sh-stats b { font-size: 17px; } .sheet.mini .sh-stats span { font-size: 10px; }
 .sheet.mini .sh-grid { border-spacing: 3px; }
 .sheet.mini .sh-corner { width: 58px; }
@@ -472,8 +472,7 @@ table.tt.tr { min-width: 0; }
 .sh-brand { display: flex; align-items: center; gap: 14px; }
 .sh-brand small { display: block; font-size: 13px; opacity: .85; font-weight: 500; }
 .sh-brand h2 { margin: 0; font-size: 26px; font-weight: 800; line-height: 1.25; color: #fff; }
-.sh-logo { width: 46px; height: 46px; border-radius: 12px; background: rgba(255,255,255,.16); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 9px; flex-shrink: 0; }
-.sh-logo i { background: #fff; border-radius: 3px; } .sh-logo i:nth-child(2) { background: rgba(255,255,255,.5); }
+.sh-logo { width: 50px; height: 50px; object-fit: contain; flex-shrink: 0; display: block; }
 .sh-stats { display: flex; gap: 10px; }
 .sh-stats div { background: rgba(255,255,255,.14); border-radius: 12px; padding: 6px 14px; text-align: center; min-width: 74px; }
 .sh-stats b { display: block; font-size: 22px; line-height: 1.15; }
@@ -498,7 +497,7 @@ table.tt.tr { min-width: 0; }
 .sheet.compact { padding: 6px 4px; }
 .sheet.compact .sh-head { padding: 6px 12px; margin-bottom: 4px; border-radius: 10px; }
 .sheet.compact .sh-brand h2 { font-size: 17px; } .sheet.compact .sh-brand small { font-size: 10px; }
-.sheet.compact .sh-logo { width: 30px; height: 30px; padding: 6px; border-radius: 8px; }
+.sheet.compact .sh-logo { width: 32px; height: 32px; }
 .sheet.compact .sh-stats div { padding: 2px 8px; min-width: 50px; } .sheet.compact .sh-stats b { font-size: 14px; } .sheet.compact .sh-stats span { font-size: 9px; }
 .sheet.compact .sh-grid { border-spacing: 3px; }
 .sheet.compact .sh-corner { width: 60px; }

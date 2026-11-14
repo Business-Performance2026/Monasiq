@@ -1,9 +1,10 @@
 // تصميم ورقة الجدول (طباعة + تحميل PDF) — يُستخدم في لوحة المدرسة ولوحة المعلم
-import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611141504";
+import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611141527";
 
 const DAY_EN = { "الأحد": "Sunday", "الاثنين": "Monday", "الثلاثاء": "Tuesday", "الأربعاء": "Wednesday", "الخميس": "Thursday", "الجمعة": "Friday", "السبت": "Saturday" };
 const dayLabel = d => isEn ? (DAY_EN[d] || d) : d;
 const L = s => tr(s);
+const LOGO = new URL("img/icon-96.png", import.meta.url).href;
 
 // مزج اللون مع الأبيض (بدون color-mix ليعمل مع التحميل كصورة)
 export function tint(hex, a) {
@@ -34,7 +35,7 @@ export function sheetHTML(sh, compact = false) {
   const kindLabel = sh.kind === "teacher" ? L("جدول المعلم") : L("جدول الشعبة");
   return `<div class="sheet ${cls}" dir="${isEn ? "ltr" : "rtl"}" data-no-i18n>
     <div class="sh-head">
-      <div class="sh-brand"><span class="sh-logo"><i></i><i></i><i></i><i></i></span><div><small>${esc(kindLabel)}</small><h2>${esc(sh.title)}</h2></div></div>
+      <div class="sh-brand"><img class="sh-logo" src="${LOGO}" alt=""><div><small>${esc(kindLabel)}</small><h2>${esc(sh.title)}</h2></div></div>
       <div class="sh-stats">${(sh.stats || []).map(s => `<div><b>${esc(s.value)}</b><span>${esc(s.label)}</span></div>`).join("")}</div>
     </div>
     <table class="sh-grid"><thead><tr><th class="sh-corner"></th>${head}</tr></thead><tbody>${rows}</tbody></table>
