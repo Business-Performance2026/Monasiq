@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141636";
-import { setLang } from "./i18n.js?v=202611141636";
-import { schedule, reconcile } from "./scheduler.js?v=202611141636";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141636";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141636";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141636";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141636";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141645";
+import { setLang } from "./i18n.js?v=202611141645";
+import { schedule, reconcile } from "./scheduler.js?v=202611141645";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141645";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141645";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141645";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141645";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
