@@ -210,7 +210,7 @@ export const EN = {
   "حسابك موقوف حاليًا. تواصل مع إدارة مدرستك.": "Your account is suspended. Please contact your school.",
   "طلب انضمام لمدرسة": "Request to join a school",
   "أنا معلم، كيف أشاهد جدولي؟": "I'm a teacher. How do I see my timetable?",
-  "اضغط «أنا معلم» وسجّل حسابك واختر مدرستك. بعد موافقة إدارة المدرسة تدخل وتشاهد جدولك وحصص اليوم من الجوال أو الكمبيوتر.": "Tap “I'm a teacher”, create your account and choose your school. After the school approves, log in to see your timetable and today's periods on your phone or computer.",
+  "اضغط «سجّل كمعلم» وسجّل حسابك واختر مدرستك. بعد موافقة إدارة المدرسة تدخل وتشاهد جدولك وحصص اليوم من الجوال أو الكمبيوتر.": "Tap “Sign up as a teacher”, create your account and choose your school. After the school approves, log in to see your timetable and today's periods on your phone or computer.",
   "حسابات المعلمين": "Teacher accounts", "طلبات الانضمام": "Join requests", "المفعّلون": "Active", "الموقوفون": "Suspended", "مفعّل": "Active", "موقوف": "Suspended",
   "يسجّل المعلم من صفحة «التسجيل» ويختار مدرستك، ثم يظهر طلبه هنا. بعد الموافقة يربط بجدوله في المدرسة ويستطيع الدخول ومشاهدة جدوله.": "Teachers sign up from the registration page and choose your school; their requests appear here. Once approved and linked to their timetable, they can log in and see it.",
   "ربط الحساب بالمعلم في جدول المدرسة": "Link this account to a teacher in the school timetable", "— بدون ربط —": "— Not linked —",

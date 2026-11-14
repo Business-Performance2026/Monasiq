@@ -119,8 +119,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: .95rem; }
 .nav-links a:hover { color: var(--primary); }
 .nav-cta { display: flex; gap: .5rem; }
 @media (max-width: 860px) { .nav-links { display: none; } }
-.nav-cta .login-ic { display: none; padding: .5em; width: 42px; }
-@media (max-width: 640px) { .nav-cta .login-txt { display: none; } .nav-cta .login-ic { display: inline-flex; } }
 
 .hero { padding: 4.5rem 0 3.5rem; background: radial-gradient(1200px 400px at 80% -10%, #dbe9fb 0%, transparent 60%), var(--bg); }
 .hero .container { display: grid; grid-template-columns: 1.05fr 1fr; gap: 3rem; align-items: center; }
