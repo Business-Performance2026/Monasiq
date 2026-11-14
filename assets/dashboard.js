@@ -1,12 +1,12 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141756";
-import { setLang } from "./i18n.js?v=202611141756";
-import { schedule, reconcile } from "./scheduler.js?v=202611141756";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141756";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141756";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141756";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141756";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141756";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141811";
+import { setLang } from "./i18n.js?v=202611141811";
+import { schedule, reconcile } from "./scheduler.js?v=202611141811";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141811";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141811";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141811";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141811";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141811";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -326,9 +326,9 @@ function cleanSettings() {
   return o;
 }
 // تحويل البطاقات التي تحمل data-fold إلى أقسام قابلة للطي (العنوان يفتح ويغلق، والحالة تُحفظ)
-function foldCards(root, page) {
+function foldCards(root, page, defaults = []) {
   const key = "fold_" + page;
-  let open; try { open = new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { open = new Set(); }
+  let open; try { const v = localStorage.getItem(key); open = new Set(v ? JSON.parse(v) : defaults); } catch { open = new Set(defaults); }
   root.querySelectorAll(".card[data-fold]").forEach(card => {
     const h = card.querySelector(":scope > h3"); if (!h || card.querySelector(":scope > .fold-head")) return;
     const id = card.dataset.fold;
@@ -524,7 +524,7 @@ async function importData(data, replace) {
 function vGrades() {
   return `
   <div class="page-title"><h1>الصفوف والشعب</h1></div>
-  <div class="card">
+  <div class="card" data-fold="addGrade" data-sum="${esc(tf("{0} صفوف · {1} شعبة", S.grades.length, S.sections.length))}">
     <h3>إضافة صف</h3>
     <form id="gradeForm" class="g-grade">
       <div class="field"><label>اسم الصف</label><input name="name" list="gradeNames" placeholder="مثال: العاشر" required></div>
@@ -537,17 +537,27 @@ function vGrades() {
   </div>
   ${S.grades.length ? S.grades.map(g => {
     const secs = S.sections.filter(s => s.gradeId === g.id);
-    return `<div class="grade-block" data-g="${g.id}">
-      <div class="gh"><h3>${esc(g.name)} <span class="badge info">${esc(g.code)}</span> <span class="muted" style="font-size:.9rem">${secs.length} شعبة</span></h3>
-        <div class="row-actions">
+    const open = gOpen.has(g.id), nr = secs.reduce((a, x) => a + secRuleCount(x), 0);
+    return `<div class="grade-block ${open ? "open" : ""}" data-g="${g.id}">
+      <div class="gh" data-act="toggleG" role="button" tabindex="0" aria-expanded="${open}">
+        <h3>${esc(g.name)} <span class="badge info">${esc(g.code)}</span></h3>
+        <span class="gh-sum"><span class="muted">${esc(tf("{0} شعبة", secs.length))}${nr ? ` · ${esc(tf("{0} قيود", nr))}` : ""}</span><span class="ld-chev"></span></span>
+      </div>
+      <div class="g-body">
+        <div class="row-actions g-acts">
           <button class="btn sm primary" data-act="addSec">+ شعبة</button>
           <button class="btn sm" data-act="editGrade">تعديل</button>
           <button class="btn sm danger" data-act="delGrade">حذف</button>
-        </div></div>
-      <div>${secs.length ? `<div class="sec-grid">${secs.map(s => { const n = secRuleCount(s); return `<button type="button" class="sec-btn ${n ? "has-rules" : ""}" data-act="secRules" data-s="${s.id}" title="${esc(secRulesSummary(s) || "")}"><b>${esc(secLabel(s))}</b><span class="sec-sub"><span data-ic="${n ? "lock" : "settings"}" data-size="13"></span>${n ? esc(tf("{0} قيود", n)) : tr("القيود")}</span></button>`; }).join("")}</div>` : "<span class='muted'>لا توجد شعب</span>"}</div>
+        </div>
+        ${secs.length ? `<div class="sec-grid">${secs.map(s => { const n = secRuleCount(s); return `<button type="button" class="sec-btn ${n ? "has-rules" : ""}" data-act="secRules" data-s="${s.id}" title="${esc(secRulesSummary(s) || "")}"><b>${esc(secLabel(s))}</b><span class="sec-sub"><span data-ic="${n ? "lock" : "settings"}" data-size="13"></span>${n ? esc(tf("{0} قيود", n)) : tr("القيود")}</span></button>`; }).join("")}</div>
+        <p class="sec-hint">${tr("اضغط على أي شعبة لإضافة قيد مخصص")}</p>` : "<span class='muted'>لا توجد شعب</span>"}
+      </div>
     </div>`;
   }).join("") : `<div class="card empty"><div class="big">🏷️</div>أضف أول صف من النموذج أعلاه</div>`}`;
 }
+// الصفوف المفتوحة في صفحة الصفوف والشعب
+const gOpen = new Set((() => { try { return JSON.parse(localStorage.getItem("gOpen") || "[]"); } catch { return []; } })());
+const saveGOpen = () => { try { localStorage.setItem("gOpen", JSON.stringify([...gOpen])); } catch {} };
 const secRuleCount = s => (s.rules?.free || []).length + (s.rules?.days || []).length;
 const secHasRules = s => secRuleCount(s) > 0;
 function secRulesSummary(s) {
@@ -611,6 +621,8 @@ function sectionModal(sec) {
 }
 BIND.grades = v => {
   fillIcons(v);
+  foldCards(v, "grades", S.grades.length ? [] : ["addGrade"]);
+  v.onkeydown = e => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".gh")) { e.preventDefault(); e.target.click(); } };
   const f = $("gradeForm");
   f.name.oninput = () => { const i = GRADE_NAMES.indexOf(f.name.value.trim()); if (i >= 0) f.code.value = i + 1; };
   f.onsubmit = async e => {
@@ -620,6 +632,7 @@ BIND.grades = v => {
     if (S.grades.some(g => g.code === code)) return toast("يوجد صف بنفس الرمز", "error");
     try {
       const gref = doc(col("grades"));
+      gOpen.add(gref.id); saveGOpen();
       const b = writeBatch(db);
       b.set(gref, { name, code, createdAt: serverTimestamp() });
       for (let i = 1; i <= count; i++) b.set(doc(col("sections")), { gradeId: gref.id, num: String(i) });
@@ -632,6 +645,12 @@ BIND.grades = v => {
     const gid = b.closest("[data-g]")?.dataset.g, g = grade(gid);
     const act = b.dataset.act;
     if (act === "secRules") return sectionModal(section(b.dataset.s));
+    if (act === "toggleG") {
+      const blk = b.closest(".grade-block"), o = blk.classList.toggle("open");
+      b.setAttribute("aria-expanded", o);
+      if (o) gOpen.add(gid); else gOpen.delete(gid);
+      return saveGOpen();
+    }
     try {
       if (act === "addSec") {
         const nums = S.sections.filter(s => s.gradeId === gid).map(s => num(s.num));

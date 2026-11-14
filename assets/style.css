@@ -255,8 +255,17 @@ body { overflow-x: clip; }
 .empty { text-align: center; color: var(--muted); padding: 2rem 1rem; }
 .empty .big { font-size: 2.4rem; }
 .row-actions { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; }
-.grade-block { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; margin-bottom: .8rem; background: #fff; }
-.grade-block .gh { display: flex; justify-content: space-between; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.grade-block { border: 1px solid var(--line); border-radius: 12px; margin-bottom: .8rem; background: #fff; overflow: hidden; }
+.grade-block .gh { display: flex; justify-content: space-between; align-items: center; gap: .6rem; padding: .95rem 1.1rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.grade-block .gh:hover { background: #f8fafc; }
+.grade-block .gh:focus-visible { outline: 2px solid var(--primary-2); outline-offset: -2px; }
+.gh-sum { display: flex; align-items: center; gap: .6rem; font-size: .9rem; }
+.g-body { display: none; padding: 0 1.1rem 1rem; }
+.grade-block.open .g-body { display: block; animation: selIn .18s ease; }
+.grade-block.open .gh { border-bottom: 1px solid var(--line); margin-bottom: .8rem; }
+.grade-block.open .ld-chev { transform: rotate(180deg); }
+.g-acts { margin-bottom: .8rem; }
+.sec-hint { font-size: .8rem; color: var(--muted); margin: .6rem 0 0; }
 .grade-block h3 { margin: 0; font-size: 1.1rem; }
 .sec-chip { display: inline-flex; align-items: center; gap: .35em; background: var(--primary-soft); color: var(--primary); padding: .25em .4em .25em .75em; border-radius: 9px; margin: .2em; font-weight: 700; }
 .sec-chip button { background: none; border: 0; color: var(--bad); cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 .2em; }
@@ -717,3 +726,4 @@ table.tt.tr { min-width: 0; }
 .card.fold.open .fold-head { border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
 .card.fold.open .ld-chev { transform: rotate(180deg); }
 @media (max-width: 640px) { .fold-head { padding: .95rem 1rem; } .fold-body { padding: 0 1rem 1rem; } .fold-sum .muted { max-width: 38vw; } }
+.card + .grade-block { margin-top: .8rem; }
