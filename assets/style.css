@@ -447,3 +447,4 @@ table.tt.tr { min-width: 0; }
 .acc-info div { display: flex; flex-direction: column; } .acc-info span { color: var(--muted); font-size: .82rem; } .acc-info b { overflow-wrap: anywhere; }
 @media (max-width: 640px) { .acc-info { grid-template-columns: 1fr; } .ti-t { display: none; } .today-item { grid-template-columns: 46px 1fr; } }
 @media (max-width: 480px) { .tp-top .l-full { display: none; } .tp-top .l-short { display: inline; } }
+.chip .pcount { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 0 .4em; font-size: .75rem; font-weight: 700; color: var(--primary); margin-inline-start: .25em; white-space: nowrap; }

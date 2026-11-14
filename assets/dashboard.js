@@ -541,7 +541,7 @@ function drawTeachers() {
       return `<tr data-id="${t.id}"><td><b>${esc(t.name)}</b>${t.phone ? `<div class="muted" style="font-size:.82rem"><span dir="ltr">${esc(t.phone)}</span></div>` : ""}</td>
       <td>${esc(subject(t.subjectId)?.name || "—")}</td>
       <td style="max-width:380px">${(t.assignments || []).map(a => { const sb = subject(a.subjectId);
-        return `<span class="chip" title="${esc(sb?.name || "")}"><span class="dot" style="background:${sb?.color || "#999"}"></span>${esc(secLabel(section(a.sectionId)))} <b>${num(a.periods)}</b></span>`; }).join("") || "<span class='muted'>—</span>"}</td>
+        return `<span class="chip" title="${esc(sb?.name || "")}"><span class="dot" style="background:${sb?.color || "#999"}"></span><bdi>${esc(secLabel(section(a.sectionId)))}</bdi><span class="pcount">${esc(tf("{0} حصص", num(a.periods)))}</span></span>`; }).join("") || "<span class='muted'>—</span>"}</td>
       <td><span class="badge ${max && l > max ? "bad" : max && l === max ? "ok" : "info"}">${l}/${max || "-"}</span></td>
       <td><div class="row-actions"><button class="btn sm" data-act="edit">تعديل</button><button class="btn sm danger" data-act="del">حذف</button></div></td></tr>`;
     }).join("")}</tbody></table></div>`

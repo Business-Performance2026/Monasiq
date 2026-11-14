@@ -230,5 +230,6 @@ export const EN = {
   "ليس يوم دوام": "Not a school day", "لا توجد لديك حصص اليوم": "You have no periods today",
   "لم تربطك إدارة المدرسة بجدولك بعد. سيظهر جدولك هنا بعد الربط.": "The school hasn't linked you to your timetable yet. It will appear here once linked.",
   "لم يتم توزيع جدولك بعد. تابع لاحقًا.": "Your timetable hasn't been scheduled yet. Check back later.",
-  "تعذّر تحديث قائمة المدارس للمعلمين. تأكد من نشر قواعد Firestore الجديدة.": "Couldn't update the school list for teachers. Make sure the new Firestore rules are published."
+  "تعذّر تحديث قائمة المدارس للمعلمين. تأكد من نشر قواعد Firestore الجديدة.": "Couldn't update the school list for teachers. Make sure the new Firestore rules are published.",
+  "{0} حصص": "{0} p/w"
 };
