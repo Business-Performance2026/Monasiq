@@ -10,7 +10,8 @@ export const APP = {
   taglineEn: "School Timetable Distribution Platform",
   contactPhone: "",   // مثال: "+96890000000" — اتركه فارغًا لإخفائه
   contactEmail: "",   // مثال: "info@example.com" — اتركه فارغًا لإخفائه
-  whatsapp: ""        // رقم واتساب بدون + مثال: "96890000000"
+  whatsapp: "",
+  countryCode: "968"  // رمز الدولة لأرقام المعلمين المحلية (واتساب)        // رقم واتساب بدون + مثال: "96890000000"
 };
 
 // 2) إعدادات Firebase — انسخها من:

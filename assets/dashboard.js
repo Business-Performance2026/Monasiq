@@ -1,10 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611140003";
-import { setLang } from "./i18n.js?v=202611140003";
-import { schedule, reconcile } from "./scheduler.js?v=202611140003";
-import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js?v=202611140003";
-import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611140003";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611140003";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611140018";
+import { setLang } from "./i18n.js?v=202611140018";
+import { schedule, reconcile } from "./scheduler.js?v=202611140018";
+import { sendTimetableWA, WA_ICON } from "./whatsapp.js?v=202611140018";
+import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js?v=202611140018";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611140018";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611140018";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -625,6 +626,16 @@ function vTeachers() {
   </div>` : ""}
   <div id="tList"></div>`;
 }
+// رقم المعلم: من بياناته، أو من حسابه في المنصة
+const teacherPhone = t => t?.phone || S.accounts.find(a => a.teacherId === t?.id && a.phone)?.phone || "";
+async function waTeacher(t) {
+  const phone = teacherPhone(t);
+  if (!phone) return toast("لا يوجد رقم هاتف لهذا المعلم", "error");
+  if (!TT.lessons) ttSync();
+  if (!TT.lessons.some(x => x.t === t.id && x.d != null)) return toast("لا يوجد جدول موزّع لهذا المعلم بعد", "error");
+  await sendTimetableWA({ name: t.name, phone, sheet: sheetFor("teacher", t.id) });
+}
+const waBtn = (t, extra = "") => teacherPhone(t) ? `<button type="button" class="wa-btn ${extra}" data-act="wa" title="${esc(tr("إرسال الجدول عبر واتساب"))}">${WA_ICON}<span>${tr("واتساب")}</span></button>` : "";
 function teacherRow(t) {
   const l = load(t), max = num(t.maxLoad);
   const r = t.rules || {};
@@ -632,7 +643,8 @@ function teacherRow(t) {
   if (r.mode && r.mode !== "none") tags.push(tr({ double: "حصص مزدوجة", noConsec: "بدون متتالية", spread: "متباعدة" }[r.mode]));
   if (r.maxRun) tags.push(tf("أقصى {0} متتالية", r.maxRun));
   if (r.periodMax && Object.keys(r.periodMax).length) tags.push(tr("حدود حصص"));
-  return `<tr data-id="${t.id}"><td><b>${esc(t.name)}</b>${t.phone ? `<div class="muted" style="font-size:.82rem"><span dir="ltr">${esc(t.phone)}</span></div>` : ""}
+  const ph = teacherPhone(t);
+  return `<tr data-id="${t.id}"><td><b>${esc(t.name)}</b>${ph ? `<div class="t-phone"><span dir="ltr" class="muted">${esc(ph)}</span>${waBtn(t)}</div>` : ""}
     ${tags.length ? `<div>${tags.map(x => `<span class="badge info rule-tag">${esc(x)}</span>`).join(" ")}</div>` : ""}</td>
     <td>${esc(subject(t.subjectId)?.name || "—")}</td>
     <td style="max-width:380px">${(t.assignments || []).map(a => { const sb = subject(a.subjectId);
@@ -668,6 +680,7 @@ BIND.teachers = () => {
     const b = e.target.closest("[data-act]"); if (!b) return;
     const t = S.teachers.find(x => x.id === b.closest("[data-id]").dataset.id);
     if (b.dataset.act === "edit") return teacherModal(t);
+    if (b.dataset.act === "wa") return waTeacher(t);
     if (!(await confirmBox(tf("حذف المعلم «{0}»؟", t.name), "حذف"))) return;
     try { await deleteDoc(dref("teachers", t.id)); toast("تم الحذف", "success"); } catch (ex) { toast(errMsg(ex), "error"); }
   };
@@ -1028,6 +1041,7 @@ function vTimetable() {
         <button data-m="section" class="${TV.mode === "section" ? "active" : ""}">الشعب</button>
       </div>
       ${TV.mode === "teacher" && S.departments.length ? `<select id="ttDept" class="tt-dept"><option value="">${tr("كل الأقسام")}</option>${S.departments.map(d => `<option value="${d.id}" ${TV.dept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>` : ""}
+      ${TV.mode === "teacher" && teacherOf(TV.id) && teacherPhone(teacherOf(TV.id)) ? `<div class="tt-wa" data-id="${TV.id}">${waBtn(teacherOf(TV.id), "lg")}</div>` : ""}
       <div class="tt-pick">
         <button class="icon-btn" id="ttPrev" ${pos <= 0 ? "disabled" : ""}><span data-ic="${isEn ? "chevL" : "chevR"}" data-size="18"></span></button>
         <select id="ttSel">${ents.map(e => `<option value="${e.id}" ${e.id === TV.id ? "selected" : ""}>${esc(e.name)}${unByEnt.get(e.id) ? ` (${unByEnt.get(e.id)} ${tr("غير موزّعة")})` : ""}</option>`).join("")}</select>
@@ -1139,6 +1153,7 @@ BIND.timetable = v => {
   ttDraw();
   $("ttMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; TV.mode = b.dataset.m; TV.id = null; TV.sel = null; render(); };
   $("ttSel").onchange = e => { TV.id = e.target.value; TV.sel = null; render(); };
+  v.querySelector(".tt-wa [data-act=wa]")?.addEventListener("click", e => { e.stopPropagation(); waTeacher(teacherOf(TV.id)); });
   if ($("ttDept")) $("ttDept").onchange = e => { TV.dept = e.target.value || null; TV.id = null; TV.sel = null; render(); };
   const step = k => { const o = [...$("ttSel").options]; const i = o.findIndex(x => x.selected) + k; if (o[i]) { TV.id = o[i].value; TV.sel = null; render(); } };
   $("ttPrev").onclick = () => step(-1);

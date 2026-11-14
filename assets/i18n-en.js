@@ -283,5 +283,11 @@ export const EN = {
   "و{0} أخرى…": "and {0} more…", "يمكنك تخفيف القيود أو تقليل الحصص، أو المتابعة وتوزيع الحصص المتبقية يدويًا.": "You can relax the rules or reduce periods, or continue and place the remaining periods manually.",
   "متابعة التوزيع": "Continue scheduling",
   "{0} حصة مثبتة كانت في وقت اجتماع أو حصة فارغة فأُعيد توزيعها": "{0} locked periods were in a meeting or free slot and were rescheduled",
-  "للحفظ كملف PDF من الطباعة اختر «حفظ بتنسيق PDF» من نافذة الطباعة.": "To save as PDF, choose “Save as PDF” in the print dialog."
+  "للحفظ كملف PDF من الطباعة اختر «حفظ بتنسيق PDF» من نافذة الطباعة.": "To save as PDF, choose “Save as PDF” in the print dialog.",
+  "واتساب": "WhatsApp", "إرسال الجدول عبر واتساب": "Send timetable via WhatsApp",
+  "السلام عليكم أستاذ {0}، هذا جدولك تفضل": "Hello {0}, here is your timetable.",
+  "جدول {0}": "Timetable - {0}", "جارٍ تجهيز ملف الجدول": "Preparing timetable file",
+  "ملف جدول {0} جاهز. اضغط «إرسال» ثم اختر واتساب والمعلم.": "{0}'s timetable is ready. Tap “Send”, then choose WhatsApp and the teacher.",
+  "تم تحميل ملف الجدول وفتح محادثة المعلم في واتساب. أرفق الملف في المحادثة ثم أرسل.": "The timetable file was downloaded and the teacher's WhatsApp chat was opened. Attach the file in the chat and send.",
+  "لا يوجد رقم هاتف لهذا المعلم": "This teacher has no phone number", "لا يوجد جدول موزّع لهذا المعلم بعد": "This teacher has no scheduled timetable yet"
 };

@@ -556,3 +556,12 @@ table.tt.tr { min-width: 0; }
 .tt-cell.viol .lsn { outline: 2px dashed var(--bad); outline-offset: -2px; }
 .sh-blk { background: #f1f5f9 !important; border-color: #94a3b8 !important; border-top-style: dashed !important; }
 .sh-blk small { color: #475569 !important; font-weight: 700; }
+
+/* واتساب */
+.wa-btn { display: inline-flex; align-items: center; gap: .3em; background: #25d366; color: #fff; border: 0; border-radius: 99px; padding: .22em .7em .22em .55em; font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; line-height: 1.4; transition: .15s; white-space: nowrap; }
+.wa-btn:hover { background: #1ebe5b; }
+.wa-btn:active { transform: scale(.95); }
+.wa-btn .wa-ic { width: 15px; height: 15px; }
+.wa-btn.lg { font-size: .9rem; padding: .45em 1em .45em .8em; }
+.wa-btn.lg .wa-ic { width: 18px; height: 18px; }
+.t-phone { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; font-size: .82rem; margin-top: .15rem; }
