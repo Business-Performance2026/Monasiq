@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141457";
-import { setLang } from "./i18n.js?v=202611141457";
-import { schedule, reconcile } from "./scheduler.js?v=202611141457";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141457";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141457";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141457";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141457";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141504";
+import { setLang } from "./i18n.js?v=202611141504";
+import { schedule, reconcile } from "./scheduler.js?v=202611141504";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141504";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141504";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141504";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141504";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -29,6 +29,10 @@ const COLORS = ["#0f766e", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#ca8a04"
 const grade = id => S.grades.find(g => g.id === id);
 const section = id => S.sections.find(s => s.id === id);
 const subject = id => S.subjects.find(s => s.id === id);
+// الترتيب المعتاد للمواد في المدارس (أي مادة غير معروفة تأتي بعدها أبجديًا)
+const SUBJ_ORDER = [/إسلامي|اسلامي|قرآن|قران/, /عربي/, /إنجليز|انجليز|انقليز/, /رياضيات/, /فيزياء/, /كيمياء/, /أحياء|احياء/, /علوم/,
+  /اجتماعي|تاريخ|جغرافيا|وطن/, /تقني|حاسوب|حاسب|معلومات/, /رياضة|بدني/, /فنون|فني|تشكيلي/, /موسيق/, /مهارات/];
+function subjRank(name) { const i = SUBJ_ORDER.findIndex(r => r.test(name || "")); return i < 0 ? 99 : i; }
 const secLabel = s => { if (!s) return "؟"; const g = grade(s.gradeId); return `${s.num}/${g ? g.code : "?"}`; };
 const load = t => (t.assignments || []).reduce((a, x) => a + num(x.periods), 0);
 const settings = () => S.school?.settings || { days: DAYS_ALL.slice(0, 5), periods: defaultPeriods(8) };
@@ -64,7 +68,7 @@ function init(user) {
   const sorters = {
     grades: (a, b) => num(a.code) - num(b.code) || a.name.localeCompare(b.name, "ar"),
     sections: (a, b) => (num(grade(a.gradeId)?.code) - num(grade(b.gradeId)?.code)) || num(a.num) - num(b.num),
-    subjects: (a, b) => a.name.localeCompare(b.name, "ar"),
+    subjects: (a, b) => subjRank(a.name) - subjRank(b.name) || a.name.localeCompare(b.name, "ar"),
     teachers: (a, b) => a.name.localeCompare(b.name, "ar"),
     departments: (a, b) => a.name.localeCompare(b.name, "ar")
   };
@@ -1447,7 +1451,20 @@ function sheetFor(mode, id) {
 function allSheets(mode) {
   ttSync();
   const used = new Set((TT.lessons || []).map(x => mode === "teacher" ? x.t : x.c));
-  return (mode === "teacher" ? S.teachers : S.sections).filter(x => used.has(x.id)).map(x => sheetFor(mode, x.id));
+  let list = (mode === "teacher" ? S.teachers : S.sections).filter(x => used.has(x.id));
+  if (mode === "teacher") {
+    // ترتيب المعلمين حسب مادتهم الأساسية (الأكثر حصصًا) بترتيب المواد المعتاد، ثم بالاسم
+    const subIdx = new Map(S.subjects.map((x, i) => [x.id, i]));
+    const main = new Map();
+    for (const t of list) {
+      const cnt = {};
+      for (const x of TT.lessons || []) if (x.t === t.id && x.d != null) cnt[x.s] = (cnt[x.s] || 0) + 1;
+      const best = Object.entries(cnt).sort((a, b) => b[1] - a[1] || (subIdx.get(a[0]) ?? 999) - (subIdx.get(b[0]) ?? 999))[0];
+      main.set(t.id, best ? (subIdx.get(best[0]) ?? 999) : 999);
+    }
+    list = [...list].sort((a, b) => main.get(a.id) - main.get(b.id) || a.name.localeCompare(b.name, "ar"));
+  }
+  return list.map(x => sheetFor(mode, x.id));
 }
 // تحميل كل الجداول في ملف PDF واحد مع شريط تقدّم وإلغاء
 async function downloadAll(mode) {
