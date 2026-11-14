@@ -16,7 +16,10 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
 
   const kCount = new Int32Array(nK), tLoad = new Int32Array(nT), cLoad = new Int32Array(nC);
   L.forEach(l => { kCount[l.ki]++; tLoad[l.ti]++; cLoad[l.ci]++; });
+  // قاعدة التوزيع اليومي (إلزامية): حصص نفس المادة لنفس الشعبة تتوزع بالتساوي على الأيام
+  // n ≤ أيام الدوام → حصة واحدة في اليوم كحد أقصى. n = 6 → حصة كل يوم ويوم واحد فيه حصتان.
   const cap = Array.from(kCount, n => Math.max(1, Math.ceil(n / D)));
+  const capDays = Array.from(kCount, n => { const f = Math.floor(n / D), r = n - D * f; return r === 0 ? D : r; }); // عدد الأيام المسموح أن تصل للحد الأعلى
   const tAvg = Array.from(tLoad, n => n / D);
 
   // ---- القيود ----
@@ -73,6 +76,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
     const tD = new Int32Array(nT * D);
     const tPC = new Int32Array(nT * P);      // عدد مرات كل حصة للمعلم
     const dbl = new Int32Array(nT);          // عدد الحصص المزدوجة المتكوّنة
+    const kAtCap = new Int32Array(nK);       // عدد الأيام التي وصلت فيها المادة للحد الأعلى
     const pos = new Int32Array(nL).fill(-1);
     const isFixed = new Uint8Array(nL);
     const kicked = new Int32Array(nL);
@@ -88,21 +92,34 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
       const l = L[i], d = (s / P) | 0;
       if (mode[l.ti] === 1) dbl[l.ti] += pairAt(l.ti, l.ki, s);
       tB[l.ti * N + s] = i; cB[l.ci * N + s] = i;
-      kD[l.ki * D + d]++; tD[l.ti * D + d]++; tPC[l.ti * P + s % P]++; pos[i] = s;
+      if (++kD[l.ki * D + d] === cap[l.ki]) kAtCap[l.ki]++;
+      tD[l.ti * D + d]++; tPC[l.ti * P + s % P]++; pos[i] = s;
     };
     const unplace = i => {
       const s = pos[i]; if (s < 0) return;
       const l = L[i], d = (s / P) | 0;
       tB[l.ti * N + s] = -1; cB[l.ci * N + s] = -1;
-      kD[l.ki * D + d]--; tD[l.ti * D + d]--; tPC[l.ti * P + s % P]--; pos[i] = -1;
+      if (kD[l.ki * D + d]-- === cap[l.ki]) kAtCap[l.ki]--;
+      tD[l.ti * D + d]--; tPC[l.ti * P + s % P]--; pos[i] = -1;
       if (mode[l.ti] === 1) dbl[l.ti] -= pairAt(l.ti, l.ki, s);
     };
 
-    // القيود الثابتة (بدون النظر لانشغال الخانة نفسها). minus: حصص المعلم التي ستُزاح من هذه الخانة
-    const hardOK = (i, s, minus = 0) => {
+    // القيود الثابتة (بدون النظر لانشغال الخانة نفسها). occ: الحصص الموجودة في الخانة والتي ستُزاح
+    const hardOK = (i, s, occ = []) => {
       const l = L[i], ti = l.ti;
       if (gBlock[s] || tBlock[ti * N + s]) return false;
-      const p = s % P;
+      const p = s % P, d = (s / P) | 0;
+      let minus = 0, minusK = 0;
+      for (const j of occ) { if (j < 0) continue; if (L[j].ti === ti) minus++; if (L[j].ki === l.ki) minusK++; }
+      // التوزيع اليومي للمادة في الشعبة
+      const orig = kD[l.ki * D + d], kd = orig - minusK;
+      const isDouble = mode[ti] === 1 && dbl[ti] < dblTarget[ti] && pairAt(ti, l.ki, s) > 0;
+      if (isDouble) { if (kd + 1 > cap[l.ki] + 1) return false; }
+      else {
+        if (kd + 1 > cap[l.ki]) return false;
+        const atCap = kAtCap[l.ki] - (orig >= cap[l.ki] ? 1 : 0) + (kd + 1 >= cap[l.ki] ? 1 : 0);
+        if (atCap > capDays[l.ki]) return false;
+      }
       const mx = pMax[ti * P + p];
       if (mx >= 0 && tPC[ti * P + p] - minus + 1 > mx) return false;
       const mr = maxRun[ti];
@@ -123,8 +140,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
       const kd = kD[l.ki * D + d];
       const m = mode[ti];
       const formsDouble = m === 1 && dbl[ti] < dblTarget[ti] && pairAt(ti, l.ki, s) > 0;
-      if (strict && kd >= cap[l.ki] && !formsDouble) return Infinity;
-      let c = kd * 4 + Math.max(0, kd + 1 - cap[l.ki]) * (formsDouble ? 2 : 25);
+      let c = kd * 4 + (formsDouble ? 2 : 0);
       c += Math.max(0, tD[ti * D + d] + 1 - Math.ceil(tAvg[ti])) * 3 + tD[ti * D + d] * 0.6;
       // المادة نفسها متتالية للشعبة (غير مرغوبة إلا للحصص المزدوجة)
       let sameAdj = 0;
@@ -157,8 +173,8 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
         const a = tB[l.ti * N + s], b = cB[l.ci * N + s];
         if (a < 0 && b < 0) { if (cost(i, s, false) < Infinity) return s; continue; }
         if (a >= 0 && b >= 0 && a !== b) continue;
-        if (!hardOK(i, s, a >= 0 ? 1 : 0)) continue;
         const j = a >= 0 ? a : b;
+        if (!hardOK(i, s, [j])) continue;
         if (isFixed[j]) continue;
         unplace(j);
         const s2 = bestSlot(j, false, s);
@@ -201,7 +217,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
       for (let s2 = 0; s2 < N; s2++) {
         const a = tB[l.ti * N + s2], b = cB[l.ci * N + s2];
         if ((a >= 0 && isFixed[a]) || (b >= 0 && isFixed[b])) continue;
-        if (!hardOK(i, s2, a >= 0 ? 1 : 0)) continue;
+        if (!hardOK(i, s2, a === b ? [a] : [a, b])) continue;
         let sc = Math.random() * 2;
         if (a >= 0) sc += 3 + kicked[a] * 2;
         if (b >= 0 && b !== a) sc += 3 + kicked[b] * 2;

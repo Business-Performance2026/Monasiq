@@ -293,5 +293,7 @@ export const EN = {
   "السلام عليكم تفضل أستاذ {0} هذا جدولك": "Hello {0}, here is your timetable:",
   "تم فتح محادثة المعلم في واتساب والرسالة جاهزة مع رابط جدوله": "The teacher's WhatsApp chat is open with the message and timetable link ready",
   "الرابط غير صالح": "Invalid link", "تأكد من الرابط أو اطلب من إدارة المدرسة إرساله مرة أخرى.": "Check the link or ask the school to send it again.",
-  "آخر تحديث: {0}": "Last updated: {0}"
+  "آخر تحديث: {0}": "Last updated: {0}",
+  "لا يمكن: الشعبة {0} عندها {1} حصة {2} في هذا اليوم. حصص المادة ({3} أسبوعيًا) تتوزع بالتساوي على الأيام.": "Not allowed: section {0} already has {1} {2} period(s) that day. The subject's periods ({3}/week) must be spread evenly across the days.",
+  "{0} حصة مخالفة لقاعدة التوزيع اليومي (مظللة بالأحمر). اضغط «توزيع تلقائي» لإعادة توزيعها، أو انقلها يدويًا.": "{0} periods break the daily distribution rule (highlighted in red). Press “Auto-schedule” to redistribute them, or move them manually."
 };

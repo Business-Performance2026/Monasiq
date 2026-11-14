@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611140043";
-import { setLang } from "./i18n.js?v=202611140043";
-import { schedule, reconcile } from "./scheduler.js?v=202611140043";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611140043";
-import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js?v=202611140043";
-import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611140043";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611140043";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141324";
+import { setLang } from "./i18n.js?v=202611141324";
+import { schedule, reconcile } from "./scheduler.js?v=202611141324";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141324";
+import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js?v=202611141324";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141324";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141324";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -930,7 +930,12 @@ function ttIndex() {
     slots.get(x.t).add(x.d * P + x.p);
   });
   const rules = ttRules();
-  return { tS, cS, slots, rules };
+  const kN = new Map(), kDay = new Map();
+  TT.lessons.forEach(x => {
+    const k = x.c + "|" + x.s; kN.set(k, (kN.get(k) || 0) + 1);
+    if (x.d != null) { const kk = k + "@" + x.d; kDay.set(kk, (kDay.get(kk) || 0) + 1); }
+  });
+  return { tS, cS, slots, rules, kN, kDay };
 }
 const DAY_EN = { "الأحد": "Sun", "الاثنين": "Mon", "الثلاثاء": "Tue", "الأربعاء": "Wed", "الخميس": "Thu", "الجمعة": "Fri", "السبت": "Sat" };
 const shortDay = d => isEn ? (DAY_EN[d] || d) : String(d).replace(/^ال/, "");
@@ -969,6 +974,47 @@ function ruleCheck(idx, teacherId, d, p, remove = [], add = []) {
   remove.forEach(x => set.delete(x)); add.forEach(x => set.add(x));
   return slotViolation(idx.rules, teacherId, d, p, set, tf);
 }
+// قاعدة التوزيع اليومي: حصص نفس المادة لنفس الشعبة تتوزع بالتساوي على أيام الأسبوع
+function dailyLimits(n) {
+  const { D } = ttDims();
+  const cap = Math.max(1, Math.ceil(n / D)), f = Math.floor(n / D), r = n - D * f;
+  return { cap, allowDays: cap > f ? r : D };
+}
+// هل نقل الحصة x إلى اليوم d يخالف القاعدة؟ (exclude: حصص ستُزاح من نفس اليوم)
+function dailyViolation(idx, x, d, excludeSameDay = 0) {
+  if (x.d === d) return null;
+  const { D } = ttDims();
+  const k = x.c + "|" + x.s, n = idx.kN.get(k) || 0;
+  const { cap, allowDays } = dailyLimits(n);
+  const cnt = dd => (idx.kDay.get(k + "@" + dd) || 0) - (dd === x.d ? 1 : 0) - (dd === d ? excludeSameDay : 0);
+  const target = cnt(d) + 1;
+  const r = idx.rules.teachers[x.t];
+  const isDouble = r?.mode === "double";
+  if (target > cap + (isDouble ? 1 : 0)) return dailyMsg(x, cnt(d), n);
+  if (!isDouble && cap > 1) {
+    let atCap = 0;
+    for (let dd = 0; dd < D; dd++) if ((dd === d ? target : cnt(dd)) >= cap) atCap++;
+    if (atCap > allowDays) return dailyMsg(x, cnt(d), n);
+  }
+  return null;
+}
+const dailyMsg = (x, have, n) => tf("لا يمكن: الشعبة {0} عندها {1} حصة {2} في هذا اليوم. حصص المادة ({3} أسبوعيًا) تتوزع بالتساوي على الأيام.", secLabel(section(x.c)), have, subject(x.s)?.name || "", n);
+// الحصص المخالفة حاليًا (مثل جدول مستورد)
+function dailyViolators(idx) {
+  const { D } = ttDims();
+  const bad = new Set();
+  const byK = new Map();
+  TT.lessons.forEach((x, i) => { if (x.d == null) return; const k = x.c + "|" + x.s; if (!byK.has(k)) byK.set(k, []); byK.get(k).push(i); });
+  for (const [k, list] of byK) {
+    const t = TT.lessons[list[0]].t;
+    if (idx.rules.teachers[t]?.mode === "double") continue;
+    const { cap, allowDays } = dailyLimits(idx.kN.get(k) || 0);
+    const per = new Map(); list.forEach(i => { const d = TT.lessons[i].d; per.set(d, (per.get(d) || 0) + 1); });
+    const atCap = [...per.values()].filter(v => v >= cap).length;
+    list.forEach(i => { const v = per.get(TT.lessons[i].d); if (v > cap || (cap > 1 && v >= cap && atCap > allowDays) || (cap === 1 && v > 1)) bad.add(i); });
+  }
+  return bad;
+}
 function canMove(i, d, p, idx) {
   const L = TT.lessons[i];
   if (L.d === d && L.p === p) return { ok: false, same: true };
@@ -976,7 +1022,7 @@ function canMove(i, d, p, idx) {
   const from = L.d != null ? L.d * P + L.p : -1, to = d * P + p;
   const a = idx.tS.get(`${L.t}@${d}.${p}`), b = idx.cS.get(`${L.c}@${d}.${p}`);
   if (a == null && b == null) {
-    const v = ruleCheck(idx, L.t, d, p, from >= 0 ? [from] : []);
+    const v = ruleCheck(idx, L.t, d, p, from >= 0 ? [from] : []) || dailyViolation(idx, L, d);
     return v ? { ok: false, reason: v } : { ok: true };
   }
   if (a != null && b != null && a !== b) {
@@ -990,6 +1036,10 @@ function canMove(i, d, p, idx) {
   // تبديل: هل تستطيع الحصة j الذهاب إلى مكان L؟
   const ta = idx.tS.get(`${J.t}@${L.d}.${L.p}`), cb = idx.cS.get(`${J.c}@${L.d}.${L.p}`);
   if ((ta == null || ta === i) && (cb == null || cb === i)) {
+    if (L.c + "|" + L.s !== J.c + "|" + J.s && L.d !== d) {
+      const v = dailyViolation(idx, L, d, J.c === L.c && J.s === L.s ? 1 : 0) || dailyViolation(idx, J, L.d);
+      if (v) return { ok: false, reason: v };
+    }
     if (J.t !== L.t) {
       // تبديل بين معلمين مختلفين: نتحقق من قيود الاثنين
       const v1 = ruleCheck(idx, L.t, d, p, [from]);
@@ -1101,6 +1151,7 @@ function ttGridHTML(mode, id, opts = {}) {
       if (i === sel) cls += " sel";
       if (x.l) cls += " locked";
       if (opts.interactive && i === TV.flash) cls += " flash";
+      if (opts.bad?.has(i)) cls += " viol";
       inner = `<div class="lsn" style="--c:${sb?.color || "#64748b"}"><b>${esc(main)}</b><small>${esc(sub)}</small>${x.l ? `<i class="lk" data-ic="lock" data-size="12"></i>` : ""}</div>`;
       data += ` data-i="${i}"`;
     }
@@ -1130,7 +1181,8 @@ function ttDraw() {
   if (TV.flash != null) { clearTimeout(TV.flashT); TV.flashT = setTimeout(() => { TV.flash = null; }, 1600); }
   const idx = ttIndex();
   ttOrient = innerWidth < 700;
-  grid.innerHTML = `<div class="tt-wrap">${ttGridHTML(TV.mode, TV.id, { interactive: true, transpose: ttOrient, idx })}</div>`;
+  const bad = dailyViolators(idx);
+  grid.innerHTML = `${bad.size ? `<div class="notice bad viol-note">${esc(tf("{0} حصة مخالفة لقاعدة التوزيع اليومي (مظللة بالأحمر). اضغط «توزيع تلقائي» لإعادة توزيعها، أو انقلها يدويًا.", bad.size))}</div>` : ""}<div class="tt-wrap">${ttGridHTML(TV.mode, TV.id, { interactive: true, transpose: ttOrient, idx, bad })}</div>`;
   // الحصص غير الموزعة
   const un = TT.lessons.map((x, i) => [x, i]).filter(([x]) => x.d == null && (TV.mode === "teacher" ? x.t : x.c) === TV.id);
   $("ttTray").innerHTML = un.length ? `<div class="tray"><b>حصص غير موزّعة:</b> ${un.map(([x, i]) => {

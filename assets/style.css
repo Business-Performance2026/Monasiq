@@ -576,3 +576,5 @@ table.tt.tr { min-width: 0; }
 .share-scale .sheet { width: 1123px; }
 .share-page .tp-main { width: min(1180px, 100%); }
 @media (max-width: 640px) { .share-head .row-actions { width: 100%; } .share-head .row-actions .btn { flex: 1; } }
+.tt-cell.viol .lsn { outline: 2.5px dashed var(--bad); outline-offset: -2px; background: #fee2e2 !important; }
+.viol-note { margin-bottom: .7rem; font-size: .9rem; }
