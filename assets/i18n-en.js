@@ -315,5 +315,6 @@ export const EN = {
   "يوم {0} مخصص للمعلم {1} مع الشعبة {2}": "{0} is reserved for {1} with section {2}",
   "يوم {0} محجوز معظمه للمعلم {1} مع الشعبة {2}": "{0} is mostly reserved for {1} with section {2}",
   "حصص هذا المعلم مع الشعبة {0} يجب أن تكون يوم {1} أولًا": "This teacher's periods with section {0} must be on {1} first",
-  "الشعبة {0}: لديها {1} حصة والمتاح {2} فقط (بسبب الأوقات الفارغة)": "Section {0}: has {1} periods but only {2} slots are available (because of free times)"
+  "الشعبة {0}: لديها {1} حصة والمتاح {2} فقط (بسبب الأوقات الفارغة)": "Section {0}: has {1} periods but only {2} slots are available (because of free times)",
+  "{0} قيود": "{0} rules", "القيود": "Rules", "حذف الشعبة": "Delete section"
 };

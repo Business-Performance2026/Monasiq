@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141400";
-import { setLang } from "./i18n.js?v=202611141400";
-import { schedule, reconcile } from "./scheduler.js?v=202611141400";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141400";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141400";
-import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141400";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141400";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141414";
+import { setLang } from "./i18n.js?v=202611141414";
+import { schedule, reconcile } from "./scheduler.js?v=202611141414";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141414";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141414";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141414";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141414";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -468,11 +468,12 @@ function vGrades() {
           <button class="btn sm" data-act="editGrade">تعديل</button>
           <button class="btn sm danger" data-act="delGrade">حذف</button>
         </div></div>
-      <div>${secs.map(s => `<span class="sec-chip ${secHasRules(s) ? "has-rules" : ""}" data-act="secRules" data-s="${s.id}" title="${esc(secRulesSummary(s) || tr("اضغط لإضافة قيود للشعبة"))}">${secHasRules(s) ? `<span data-ic="lock" data-size="12"></span>` : ""}${esc(secLabel(s))}<button title="حذف" data-act="delSec" data-s="${s.id}">×</button></span>`).join("") || "<span class='muted'>لا توجد شعب</span>"}</div>
+      <div>${secs.length ? `<div class="sec-grid">${secs.map(s => { const n = secRuleCount(s); return `<button type="button" class="sec-btn ${n ? "has-rules" : ""}" data-act="secRules" data-s="${s.id}" title="${esc(secRulesSummary(s) || "")}"><b>${esc(secLabel(s))}</b><span class="sec-sub"><span data-ic="${n ? "lock" : "settings"}" data-size="13"></span>${n ? esc(tf("{0} قيود", n)) : tr("القيود")}</span></button>`; }).join("")}</div>` : "<span class='muted'>لا توجد شعب</span>"}</div>
     </div>`;
   }).join("") : `<div class="card empty"><div class="big">🏷️</div>أضف أول صف من النموذج أعلاه</div>`}`;
 }
-const secHasRules = s => !!((s.rules?.free || []).length || (s.rules?.days || []).length);
+const secRuleCount = s => (s.rules?.free || []).length + (s.rules?.days || []).length;
+const secHasRules = s => secRuleCount(s) > 0;
 function secRulesSummary(s) {
   const r = s.rules || {}, out = [];
   (r.free || []).forEach(m => out.push(tf("فارغة: {0}", slotLabel(m))));
@@ -491,7 +492,8 @@ function sectionModal(sec) {
     <div id="secFree"></div>
     <label style="margin-top:1.1rem">${tr("يوم كامل لمعلم معيّن")} <small class="muted">(${tr("مثل معلم السياحة")})</small></label>
     <div id="secDays"></div>
-    <div class="modal-actions"><button class="btn primary" id="secSave">💾 ${tr("حفظ")}</button><button type="button" class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+    <div class="modal-actions sec-actions"><button class="btn primary" id="secSave">💾 ${tr("حفظ")}</button><button type="button" class="btn ghost" data-close>${tr("إلغاء")}</button>
+      <button type="button" class="btn danger sec-del" id="secDel">🗑 ${tr("حذف الشعبة")}</button></div>`);
   fillIcons($("modal"));
   const drawFree = () => { $("secFree").innerHTML = slotPicker("secFreeList", free, true); bindSlots($("secFree"), free, drawFree); };
   const drawDays = () => {
@@ -516,6 +518,11 @@ function sectionModal(sec) {
     });
   };
   drawFree(); drawDays();
+  $("secDel").onclick = async () => {
+    closeModal();
+    if (!(await confirmBox(tf("حذف الشعبة {0}؟ سيتم حذف إسنادها من المعلمين.", label), tr("حذف")))) return;
+    try { await removeSections([sec.id]); toast("تم حذف الشعبة", "success"); } catch (ex) { toast(errMsg(ex), "error"); }
+  };
   $("secSave").onclick = async () => {
     const clean = days.filter(o => o.t);
     if (new Set(clean.map(o => o.d)).size !== clean.length) return toast("لا يمكن تخصيص نفس اليوم لأكثر من معلم", "error");
