@@ -23,8 +23,8 @@ export const EN = {
   "عن المنصة": "About", "المميزات": "Features", "طريقة التسجيل": "How to register", "أسئلة شائعة": "FAQ",
   "تسجيل الدخول": "Log in", "سجّل مدرستك": "Register your school", "لإدارات المدارس": "For school administrations",
   "وزّع جدول الحصص": "Build your timetable", "بدقائق بدل أيام": "in minutes, not days",
-  "منصة سحابية تساعد إدارة المدرسة على إدخال المعلمين والصفوف والشعب والمواد، ثم توزيع الحصص على أيام الأسبوع بدون تعارض، وطباعة جدول كل معلم وكل شعبة. تعمل من الكمبيوتر والجوال":
-    "is a cloud platform that helps school administrations enter teachers, grades, sections and subjects, distribute periods across the week without conflicts, and print every teacher's and section's timetable. Works on computers and phones",
+  "منصة سحابية تساعد إدارة المدرسة على إدخال المعلمين والصفوف والشعب والمواد، ثم توزيع الحصص على أيام الأسبوع بدون تعارض، وتحميل جدول كل معلم وكل شعبة PDF. تعمل من الكمبيوتر والجوال":
+    "is a cloud platform that helps school administrations enter teachers, grades, sections and subjects, distribute periods across the week without conflicts, and download every teacher's and section's timetable as PDF. Works on computers and phones",
   "سجّل مدرستك مجانًا": "Register your school for free", "كيف أبدأ؟": "How do I start?",
   "جدول المعلم": "Teacher timetable",
   "كل ما تحتاجه لجدول الحصص": "Everything you need for your timetable",
@@ -235,7 +235,7 @@ export const EN = {
   // الطباعة والاستيراد من PDF
   "جدول المعلم": "Teacher timetable", "جدول الشعبة": "Section timetable", "طباعة وتحميل": "Print & download",
   "تحميل الجدول المعروض PDF": "Download current timetable (PDF)", "تحميل PDF": "Download PDF",
-  "جارٍ تجهيز الملف": "Preparing file", "تعذّر إنشاء ملف PDF. استخدم الطباعة ثم «حفظ بتنسيق PDF».": "Couldn't create the PDF. Use Print, then “Save as PDF”.",
+  "جارٍ تجهيز الملف": "Preparing file", "تعذّر إنشاء ملف PDF، حاول مرة أخرى.": "Couldn't create the PDF. Please try again.",
   "ملف PDF أو JSON": "PDF or JSON file",
   "استورد المعلمين والصفوف والشعب والمواد والحصص دفعة واحدة من ملف PDF لجداول المعلمين (مثل جداول aSc) أو من ملف بيانات JSON، أو صدّر بيانات مدرستك.": "Import teachers, grades, sections, subjects and periods in one go from a PDF of teacher timetables (e.g. aSc) or a JSON data file, or export your school's data.",
   "تصدير البيانات JSON": "Export data (JSON)", "تصدير الجداول PDF": "Export timetables (PDF)",
@@ -323,5 +323,6 @@ export const EN = {
   "ملف PDF واحد": "One PDF file", "تحميل جداول كل المعلمين PDF": "Download all teacher timetables (PDF)", "تحميل جداول كل الشعب PDF": "Download all section timetables (PDF)",
   "تحميل جداول المعلمين PDF": "Download teacher timetables (PDF)", "تحميل جداول الشعب PDF": "Download section timetables (PDF)",
   "جداول المعلمين": "Teacher timetables", "جداول الشعب": "Section timetables", "جارٍ إنشاء ملف {0}": "Creating {0} file",
-  "صفحة {0} من {1}": "Page {0} of {1}", "تم تحميل {0} ({1} صفحة)": "{0} downloaded ({1} pages)"
+  "صفحة {0} من {1}": "Page {0} of {1}", "جدول {0} من {1}": "Timetable {0} of {1}", "ملف PDF واحد — 6 جداول في كل صفحة": "One PDF file — 6 timetables per page",
+  "تحميل جدول كل معلم وكل شعبة PDF": "download each teacher's and section's timetable as PDF", "تحميل الجداول PDF": "Download timetables as PDF", "حمّل جدول كل معلم وكل شعبة PDF، أو كل الجداول في ملف واحد (6 جداول في الصفحة)": "Download each teacher's and section's timetable as PDF, or all of them in one file (6 per page)", "تم تحميل {0} ({1} صفحة)": "{0} downloaded ({1} pages)"
 };

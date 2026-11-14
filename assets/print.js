@@ -1,5 +1,5 @@
 // تصميم ورقة الجدول (طباعة + تحميل PDF) — يُستخدم في لوحة المدرسة ولوحة المعلم
-import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611141442";
+import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611141457";
 
 const DAY_EN = { "الأحد": "Sunday", "الاثنين": "Monday", "الثلاثاء": "Tuesday", "الأربعاء": "Wednesday", "الخميس": "Thursday", "الجمعة": "Friday", "السبت": "Saturday" };
 const dayLabel = d => isEn ? (DAY_EN[d] || d) : d;
@@ -19,6 +19,7 @@ export function tint(hex, a) {
  *           cells: Map("d.p" -> {main, sub, color}), stats:[{label,value}], legend:[{name,color,count}] }
  */
 export function sheetHTML(sh, compact = false) {
+  const cls = compact === "mini" ? "mini" : compact ? "compact" : "";
   const P = sh.periods.length;
   const head = Array.from({ length: P }, (_, p) => {
     const t = sh.periods[p] || {};
@@ -31,7 +32,7 @@ export function sheetHTML(sh, compact = false) {
     return `<td class="sh-c"><div class="sh-l" style="background:${tint(c.color, .16)};border-color:${c.color}"><b style="color:${tint(c.color, .95)}">${esc(c.main)}</b><small>${esc(c.sub || "")}</small></div></td>`;
   }).join("")}</tr>`).join("");
   const kindLabel = sh.kind === "teacher" ? L("جدول المعلم") : L("جدول الشعبة");
-  return `<div class="sheet ${compact ? "compact" : ""}" dir="${isEn ? "ltr" : "rtl"}" data-no-i18n>
+  return `<div class="sheet ${cls}" dir="${isEn ? "ltr" : "rtl"}" data-no-i18n>
     <div class="sh-head">
       <div class="sh-brand"><span class="sh-logo"><i></i><i></i><i></i><i></i></span><div><small>${esc(kindLabel)}</small><h2>${esc(sh.title)}</h2></div></div>
       <div class="sh-stats">${(sh.stats || []).map(s => `<div><b>${esc(s.value)}</b><span>${esc(s.label)}</span></div>`).join("")}</div>
@@ -63,29 +64,38 @@ function loadScript(src) {
     document.head.appendChild(s);
   });
 }
+// perPage = 1: صفحة A4 أفقية لكل جدول — perPage = 6: صفحة A4 طولية فيها 6 جداول (عمودان × 3 صفوف)
 async function buildPdf(sheets, opts = {}) {
-  const { onProgress, signal, scale = 2, quality = 0.9 } = opts;
+  const { onProgress, signal, scale = 2, quality = 0.9, perPage = 1 } = opts;
   await Promise.all([
     loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"),
     loadScript("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")
   ]);
   if (document.fonts?.ready) await document.fonts.ready;
+  const multi = perPage > 1;
+  const cols = multi ? 2 : 1, rows = multi ? Math.ceil(perPage / 2) : 1;
   const host = document.createElement("div");
-  host.className = "sheet-render";
+  host.className = "sheet-render" + (multi ? " mini" : "");
   document.body.appendChild(host);
-  const pdf = new window.jspdf.jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+  const pdf = new window.jspdf.jsPDF({ orientation: multi ? "portrait" : "landscape", unit: "mm", format: "a4", compress: true });
+  const W = multi ? 210 : 297, H = multi ? 297 : 210, m = multi ? 6 : 8, gap = multi ? 4 : 0;
+  const cw = (W - 2 * m - gap * (cols - 1)) / cols, ch = (H - 2 * m - gap * (rows - 1)) / rows;
   try {
     for (let i = 0; i < sheets.length; i++) {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-      host.innerHTML = sheetHTML(sheets[i]);
+      host.innerHTML = sheetHTML(sheets[i], multi ? "mini" : false);
       const el = host.firstElementChild;
       const canvas = await window.html2canvas(el, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false });
       const img = canvas.toDataURL("image/jpeg", quality);
-      const W = 297, H = 210, m = 8;
-      const r = Math.min((W - 2 * m) / canvas.width, (H - 2 * m) / canvas.height);
+      const k = i % perPage;
+      if (i && !k) pdf.addPage();
+      // الترتيب من اليمين لليسار في العربية
+      const col = isEn ? k % cols : cols - 1 - (k % cols), row = Math.floor(k / cols);
+      const r = Math.min(cw / canvas.width, ch / canvas.height);
       const w = canvas.width * r, h = canvas.height * r;
-      if (i) pdf.addPage();
-      pdf.addImage(img, "JPEG", (W - w) / 2, (H - h) / 2, w, h);
+      const x = m + col * (cw + gap) + (cw - w) / 2;
+      const y = multi ? m + row * (ch + gap) : (H - h) / 2;
+      pdf.addImage(img, "JPEG", x, y, w, h);
       onProgress?.(i + 1, sheets.length);
       await new Promise(r => setTimeout(r, 0)); // إبقاء الصفحة متجاوبة
     }

@@ -452,6 +452,22 @@ table.tt.tr { min-width: 0; }
 .sheet { font-family: "Tajawal", system-ui, sans-serif; background: #fff; color: #0f172a; width: 100%; box-sizing: border-box; padding: 18px 20px 14px; border-radius: 14px; }
 .sheet-render { position: fixed; top: 0; left: -12000px; width: 1123px; z-index: -1; }
 .sheet-render .sheet { width: 1123px; min-height: 780px; display: flex; flex-direction: column; }
+/* 6 جداول في الصفحة: ورقة مربعة تقريبًا بخط أكبر نسبيًا */
+.sheet-render.mini { width: 760px; }
+.sheet-render .sheet.mini { width: 760px; min-height: 0; padding: 10px 10px 8px; }
+.sheet.mini .sh-head { padding: 8px 12px; margin-bottom: 6px; border-radius: 10px; }
+.sheet.mini .sh-brand h2 { font-size: 22px; } .sheet.mini .sh-brand small { font-size: 12px; }
+.sheet.mini .sh-logo { width: 34px; height: 34px; padding: 7px; border-radius: 9px; }
+.sheet.mini .sh-stats div { padding: 3px 8px; min-width: 52px; } .sheet.mini .sh-stats b { font-size: 17px; } .sheet.mini .sh-stats span { font-size: 10px; }
+.sheet.mini .sh-grid { border-spacing: 3px; }
+.sheet.mini .sh-corner { width: 58px; }
+.sheet.mini .sh-c, .sheet.mini .sh-l { height: 106px; min-height: 106px; }
+.sheet.mini .sh-l { border-top-width: 4px; border-radius: 7px; padding: 2px; }
+.sheet.mini .sh-l b { font-size: 15px; line-height: 1.2; } .sheet.mini .sh-l small { font-size: 11px; margin-top: 1px; }
+.sheet.mini .sh-ph { padding: 3px 1px; border-radius: 7px; } .sheet.mini .sh-pn { width: 20px; height: 20px; font-size: 11px; } .sheet.mini .sh-ph small { font-size: 9px; }
+.sheet.mini .sh-dh { font-size: 13px; border-radius: 7px; }
+.sheet.mini .sh-empty { border-radius: 7px; }
+.sheet.mini .sh-foot { margin-top: 4px; } .sheet.mini .sh-legend { display: none; } .sheet.mini .sh-meta { font-size: 9px; }
 .sh-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: linear-gradient(135deg, #0f766e, #115e59 60%, #134e4a); color: #fff; border-radius: 14px; padding: 14px 20px; margin-bottom: 12px; }
 .sh-brand { display: flex; align-items: center; gap: 14px; }
 .sh-brand small { display: block; font-size: 13px; opacity: .85; font-weight: 500; }

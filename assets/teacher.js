@@ -1,7 +1,7 @@
 // لوحة المعلم: جدولي، حصص اليوم، حسابي
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611141442";
-import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141442";
-import { buildRules } from "./rules.js?v=202611141442";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611141457";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141457";
+import { buildRules } from "./rules.js?v=202611141457";
 import { collection, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 applyBranding();
@@ -105,7 +105,7 @@ function render() {
   </div>
 
   <div class="card tt-card">
-    <div class="card-head"><h3>جدولي الأسبوعي</h3><div class="row-actions"><button class="btn sm" id="printBtn"><span data-ic="print" data-size="16"></span>طباعة</button><button class="btn sm primary" id="dlBtn"><span data-ic="download" data-size="16"></span>تحميل PDF</button></div></div>
+    <div class="card-head"><h3>جدولي الأسبوعي</h3><div class="row-actions"><button class="btn sm primary" id="dlBtn"><span data-ic="download" data-size="16"></span>تحميل PDF</button></div></div>
     <div id="grid"></div>
   </div>` : ""}
 
@@ -122,11 +122,10 @@ function render() {
   </div>`;
   fillIcons($("view"));
   drawGrid();
-  $("printBtn") && ($("printBtn").onclick = () => printSheets([mySheet()], 1));
   $("dlBtn") && ($("dlBtn").onclick = async () => {
     const sh = mySheet();
     try { toast(tr("جارٍ تجهيز الملف")); await downloadSheetsPDF([sh], sh.title); }
-    catch (e) { toast(tr("تعذّر إنشاء ملف PDF. استخدم الطباعة ثم «حفظ بتنسيق PDF»."), "error"); }
+    catch (e) { toast(tr("تعذّر إنشاء ملف PDF، حاول مرة أخرى."), "error"); }
   });
   $("pwBtn").onclick = async () => {
     try { await sendReset(S.acc.email || user.email); toast(tf("تم إرسال رابط إعادة التعيين إلى {0}", S.acc.email || user.email), "success"); }
