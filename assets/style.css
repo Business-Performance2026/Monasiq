@@ -566,9 +566,38 @@ table.tt.tr { min-width: 0; }
 .rules-box summary { cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: .4rem; }
 .rules-box[open] summary { margin-bottom: .8rem; }
 .rule-tag { font-size: .7rem; margin-top: .25rem; }
-.t-group { padding: .8rem; }
-.t-group-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; border-inline-start: 4px solid var(--c); padding-inline-start: .7rem; margin-bottom: .6rem; }
-.t-group-head h3 { margin: 0; font-size: 1.1rem; }
+.t-tools { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; padding: .8rem; }
+.t-find { position: relative; flex: 1 1 260px; }
+.t-find input { padding-inline-start: 2.3rem; }
+.t-dept { flex: 0 1 240px; width: auto; }
+.t-fold { flex-shrink: 0; }
+.t-group { padding: 0; overflow: hidden; }
+.t-group .t-group-body { padding: 0 .8rem .8rem; }
+.t-group:not(:has(.t-group-head)) .t-group-body { padding-top: .8rem; }
+.t-group:has(.t-group-head):not(.open) .t-group-body { display: none; }
+.t-group-head { all: unset; box-sizing: border-box; width: 100%; display: flex; justify-content: space-between; align-items: center; gap: .6rem; padding: .85rem 1rem; border-inline-start: 5px solid var(--c); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.t-group-head:hover { background: #f8fafc; }
+.t-group-head:focus-visible { outline: 2px solid var(--primary-2); outline-offset: -2px; }
+.t-gname { display: flex; align-items: center; gap: .5rem; font-size: 1.05rem; min-width: 0; }
+.t-gname b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-gmeta { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
+.badge.info-n { background: var(--primary-soft); color: var(--primary); }
+.t-group.open .ld-chev { transform: rotate(180deg); }
+.t-group.open .t-group-head { border-bottom: 1px solid var(--line); margin-bottom: .6rem; }
+@media (max-width: 640px) {
+  .t-dept { flex: 1 1 auto; }
+  .t-gper { display: none; }
+  /* جدول المعلمين كبطاقات على الجوال */
+  .t-tbl thead { display: none; }
+  .t-tbl, .t-tbl tbody, .t-tbl tr, .t-tbl td { display: block; width: 100%; }
+  .t-tbl tr { border: 1px solid var(--line); border-radius: 12px; padding: .7rem .8rem; margin-bottom: .6rem; }
+  .t-tbl td { border: 0; padding: .2rem 0; max-width: none !important; }
+  .t-tbl td[data-l] { display: flex; flex-wrap: wrap; gap: .1rem .3rem; align-items: center; }
+  .t-tbl td[data-l]::before { content: attr(data-l); color: var(--muted); font-size: .82rem; width: 78px; flex-shrink: 0; }
+  .t-tbl td[data-l] .chip { margin: .1em 0; }
+  .t-tbl td:last-child { padding-top: .5rem; }
+  .t-tbl td:last-child .row-actions { justify-content: flex-start; }
+}
 .dept-tabs .dot { width: .6em; height: .6em; }
 .tt-dept { width: auto; min-width: 150px; }
 .tt-find { position: relative; flex: 1 1 220px; min-width: 200px; max-width: 360px; }

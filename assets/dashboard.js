@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141722";
-import { setLang } from "./i18n.js?v=202611141722";
-import { schedule, reconcile } from "./scheduler.js?v=202611141722";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141722";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141722";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141722";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141722";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141734";
+import { setLang } from "./i18n.js?v=202611141734";
+import { schedule, reconcile } from "./scheduler.js?v=202611141734";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141734";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141734";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141734";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141734";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -739,16 +739,25 @@ BIND.subjects = v => {
 let tQuery = "";
 let TT_ENTS = [];
 let tDept = "all";
+// الأقسام المفتوحة في صفحة المعلمين (تُحفظ في المتصفح)
+const tOpen = new Set((() => { try { return JSON.parse(localStorage.getItem("tOpen") || "[]"); } catch { return []; } })());
+const saveTOpen = () => { try { localStorage.setItem("tOpen", JSON.stringify([...tOpen])); } catch {} };
 function vTeachers() {
+  const cntD = id => S.teachers.filter(t => id === "none" ? !deptsOfTeacher(t).length : deptsOfTeacher(t).some(x => x.id === id)).length;
   return `
   <div class="page-title"><h1>المعلمون</h1>
-    <div class="row-actions"><input id="tSearch" placeholder="بحث..." value="${esc(tQuery)}" style="max-width:200px"><button class="btn primary" id="addT">+ إضافة معلم</button></div></div>
+    <div class="row-actions"><button class="btn primary" id="addT">+ إضافة معلم</button></div></div>
   ${!S.subjects.length || !S.sections.length ? `<div class="notice warn">يُفضّل إضافة <a href="#grades">الشعب</a> و<a href="#subjects">المواد</a> أولًا حتى تستطيع إسنادها للمعلمين.</div>` : ""}
-  ${S.departments.length ? `<div class="tabs dept-tabs" id="tDeptTabs">
-    <button data-d="all" class="${tDept === "all" ? "active" : ""}">${tr("كل الأقسام")}</button>
-    ${S.departments.map(d => `<button data-d="${d.id}" class="${tDept === d.id ? "active" : ""}"><span class="dot" style="background:${d.color}"></span> ${esc(d.name)}</button>`).join("")}
-    <button data-d="none" class="${tDept === "none" ? "active" : ""}">${tr("بدون قسم")}</button>
-  </div>` : ""}
+  <div class="card t-tools">
+    <div class="t-find"><span class="tt-find-ic" data-ic="search" data-size="18"></span>
+      <input type="search" id="tSearch" autocomplete="off" placeholder="${esc(tr("ابحث بالاسم أو المادة أو الشعبة"))}" value="${esc(tQuery)}"></div>
+    ${S.departments.length ? `<select id="tDeptSel" class="t-dept">
+      <option value="all" ${tDept === "all" ? "selected" : ""}>${esc(tr("كل الأقسام"))} (${S.teachers.length})</option>
+      ${S.departments.map(d => `<option value="${d.id}" ${tDept === d.id ? "selected" : ""}>${esc(d.name)} (${cntD(d.id)})</option>`).join("")}
+      ${cntD("none") ? `<option value="none" ${tDept === "none" ? "selected" : ""}>${esc(tr("بدون قسم"))} (${cntD("none")})</option>` : ""}
+    </select>
+    <button class="btn sm t-fold" id="tFoldAll" type="button"></button>` : ""}
+  </div>
   <div id="tList"></div>`;
 }
 // وصف وقت التفريغ: "الثلاثاء · اليوم كامل" أو "الثلاثاء · الحصص 5-8"
@@ -786,10 +795,10 @@ function teacherRow(t) {
   const ph = teacherPhone(t);
   return `<tr data-id="${t.id}"><td><b>${esc(t.name)}</b>${ph ? `<div class="t-phone"><span dir="ltr" class="muted">${esc(ph)}</span>${waBtn(t)}</div>` : ""}
     ${tags.length ? `<div>${tags.map(x => `<span class="badge info rule-tag">${esc(x)}</span>`).join(" ")}</div>` : ""}</td>
-    <td>${esc(subject(t.subjectId)?.name || "—")}</td>
-    <td style="max-width:380px">${(t.assignments || []).map(a => { const sb = subject(a.subjectId);
+    <td data-l="${esc(tr("المادة"))}">${esc(subject(t.subjectId)?.name || "—")}</td>
+    <td data-l="${esc(tr("الشعب"))}" style="max-width:380px">${(t.assignments || []).map(a => { const sb = subject(a.subjectId);
       return `<span class="chip" title="${esc(sb?.name || "")}"><span class="dot" style="background:${sb?.color || "#999"}"></span><bdi>${esc(secLabel(section(a.sectionId)))}</bdi><span class="pcount">${esc(tf("{0} حصص", num(a.periods)))}</span></span>`; }).join("") || "<span class='muted'>—</span>"}</td>
-    <td><span class="badge ${max && l > max ? "bad" : max && l === max ? "ok" : "info"}">${l}/${max || "-"}</span></td>
+    <td data-l="${esc(tr("النصاب"))}"><span class="badge ${max && l > max ? "bad" : max && l === max ? "ok" : "info"}">${l}/${max || "-"}</span></td>
     <td><div class="row-actions"><button class="btn sm" data-act="edit">تعديل</button><button class="btn sm danger" data-act="del">حذف</button></div></td></tr>`;
 }
 function drawTeachers() {
@@ -806,18 +815,43 @@ function drawTeachers() {
   } else if (tDept === "none") groups = [{ none: true, rows: list.filter(t => !deptsOfTeacher(t).length) }];
   else { const d = deptOf(tDept); groups = d ? [{ d, rows: list.filter(t => deptsOfTeacher(t).some(x => x.id === d.id)) }] : [{ rows: list }]; }
   const total = groups.reduce((a, g) => a + g.rows.length, 0);
-  $("tList").innerHTML = total ? groups.map(g => `<div class="card t-group">
-    ${g.d || g.none ? `<div class="t-group-head" style="--c:${g.d?.color || "#94a3b8"}"><h3><span class="dot" style="background:${g.d?.color || "#94a3b8"}"></span> ${esc(g.d ? g.d.name : tr("بدون قسم"))}</h3>
-      <span class="muted">${esc(tf("{0} معلم · {1} حصة أسبوعيًا", g.rows.length, g.rows.reduce((a, t) => a + load(t), 0)))}</span></div>` : ""}
-    <div class="table-wrap"><table class="tbl">${head}<tbody>${g.rows.map(teacherRow).join("")}</tbody></table></div></div>`).join("")
+  // عند البحث أو اختيار قسم واحد: الأقسام مفتوحة. غير ذلك: حسب ما اختاره المستخدم (مطوية افتراضيًا)
+  const forceOpen = nq.length > 0 || tDept !== "all" || groups.length === 1;
+  const gk = g => g.d ? g.d.id : "none";
+  $("tList").innerHTML = total ? groups.map(g => {
+    const named = g.d || g.none, open = !named || forceOpen || tOpen.has(gk(g));
+    const c = g.d?.color || "#94a3b8";
+    return `<div class="card t-group ${open ? "open" : ""}" data-g="${gk(g)}">
+    ${named ? `<button type="button" class="t-group-head" style="--c:${c}" aria-expanded="${open}">
+      <span class="t-gname"><span class="dot" style="background:${c}"></span><b>${esc(g.d ? g.d.name : tr("بدون قسم"))}</b></span>
+      <span class="t-gmeta"><span class="badge info-n">${esc(tf("{0} معلم", g.rows.length))}</span><span class="muted t-gper">${esc(tf("{0} حصة", g.rows.reduce((a, t) => a + load(t), 0)))}</span><span class="ld-chev"></span></span>
+    </button>` : ""}
+    <div class="t-group-body"><div class="table-wrap"><table class="tbl t-tbl">${head}<tbody>${g.rows.map(teacherRow).join("")}</tbody></table></div></div></div>`;
+  }).join("")
     : `<div class="card empty"><div class="big">👩‍🏫</div>${S.teachers.length ? "لا نتائج" : "لم تتم إضافة معلمين بعد"}</div>`;
+  const fb = $("tFoldAll");
+  if (fb) {
+    const named = groups.filter(g => g.d || g.none);
+    fb.classList.toggle("hidden", forceOpen || named.length < 2);
+    const allOpen = named.every(g => tOpen.has(gk(g)));
+    fb.textContent = tr(allOpen ? "طي الكل" : "فتح الكل");
+    fb.onclick = () => { if (allOpen) tOpen.clear(); else named.forEach(g => tOpen.add(gk(g))); saveTOpen(); drawTeachers(); };
+  }
 }
 BIND.teachers = () => {
   drawTeachers();
+  fillIcons(document.querySelector(".t-tools"));
   $("tSearch").oninput = e => { tQuery = e.target.value.trim(); drawTeachers(); };
-  if ($("tDeptTabs")) $("tDeptTabs").onclick = e => { const b = e.target.closest("button"); if (!b) return; tDept = b.dataset.d; document.querySelectorAll("#tDeptTabs button").forEach(x => x.classList.toggle("active", x === b)); drawTeachers(); };
+  if ($("tDeptSel")) $("tDeptSel").onchange = e => { tDept = e.target.value; drawTeachers(); };
   $("addT").onclick = () => teacherModal();
   $("tList").onclick = async e => {
+    const h = e.target.closest(".t-group-head");
+    if (h) {
+      const g = h.closest(".t-group"), k = g.dataset.g, o = g.classList.toggle("open");
+      h.setAttribute("aria-expanded", o);
+      if (o) tOpen.add(k); else tOpen.delete(k);
+      saveTOpen(); return;
+    }
     const b = e.target.closest("[data-act]"); if (!b) return;
     const t = S.teachers.find(x => x.id === b.closest("[data-id]").dataset.id);
     if (b.dataset.act === "edit") return teacherModal(t);
