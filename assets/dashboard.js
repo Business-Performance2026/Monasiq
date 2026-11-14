@@ -72,8 +72,15 @@ function init(user) {
     if (loaded.size >= NEED && ["#accounts", "#overview", ""].includes(location.hash)) render();
   }, () => {});
   onSnapshot(doc(db, "schools", SID, "timetable", "main"), d => {
-    if (!TT.dirty && !TT.saving) { TT.saved = d.exists() ? (d.data().lessons || []) : []; TT.lessons = null; }
-    loaded.has("timetable") ? (location.hash === "#timetable" ? null : render()) : mark("timetable");
+    const incoming = d.exists() ? (d.data().lessons || []) : [];
+    TT.saved = incoming;
+    if (!loaded.has("timetable")) return mark("timetable");
+    if (TT.dirty || TT.saving) return;
+    const js = JSON.stringify(incoming);
+    if (js === TT.lastJSON) return; // صدى حفظنا نحن
+    // تغيير من جهاز آخر: نعيد بناء الجدول
+    TT.lastJSON = js; TT.lessons = null; TV.sel = null;
+    if (location.hash === "#timetable") render();
   }, e => { toast(errMsg(e), "error"); mark("timetable"); });
   for (const k of ["grades", "sections", "subjects", "teachers"]) {
     onSnapshot(col(k), snap => {
@@ -697,8 +704,8 @@ function teacherModal(t) {
 // =====================================================
 //  توزيع الجدول
 // =====================================================
-const TT = { saved: null, lessons: null, dirty: false, saving: false, timer: null, savedOk: true };
-const TV = { mode: "teacher", id: null, sel: null };
+const TT = { saved: null, lessons: null, dirty: false, saving: false, timer: null, savedOk: true, lastJSON: "" };
+const TV = { mode: "teacher", id: null, sel: null, flash: null };
 let ttOrient = null;
 
 function ttDims() { return { D: settings().days.length, P: settings().periods.length }; }
@@ -712,6 +719,7 @@ function ttSync() {
 }
 function ttIndex() {
   const tS = new Map(), cS = new Map();
+  if (!TT.lessons) ttSync();
   TT.lessons.forEach((x, i) => { if (x.d != null) { tS.set(`${x.t}@${x.d}.${x.p}`, i); cS.set(`${x.c}@${x.d}.${x.p}`, i); } });
   return { tS, cS };
 }
@@ -723,19 +731,20 @@ const teacherOf = id => S.teachers.find(t => t.id === id);
 function ttMark() {
   TT.dirty = true; TT.savedOk = false;
   clearTimeout(TT.timer);
-  TT.timer = setTimeout(ttSave, 1200);
+  TT.timer = setTimeout(ttSave, 1500);
 }
 async function ttSave() {
   if (!TT.dirty) return;
   TT.saving = true; ttStatus();
   try {
-    await setDoc(doc(db, "schools", SID, "timetable", "main"), {
-      lessons: TT.lessons.map(x => ({ t: x.t, s: x.s, c: x.c, d: x.d ?? null, p: x.p ?? null, l: !!x.l })),
-      updatedAt: serverTimestamp()
-    });
-    TT.dirty = false; TT.savedOk = true;
-  } catch (e) { toast(errMsg(e), "error"); }
+    const lessons = TT.lessons.map(x => ({ t: x.t, s: x.s, c: x.c, d: x.d ?? null, p: x.p ?? null, l: !!x.l }));
+    TT.lastJSON = JSON.stringify(lessons);
+    TT.dirty = false;
+    await setDoc(doc(db, "schools", SID, "timetable", "main"), { lessons, updatedAt: serverTimestamp() });
+    TT.savedOk = true;
+  } catch (e) { TT.dirty = true; toast(errMsg(e), "error"); }
   TT.saving = false; ttStatus();
+  if (TT.dirty) { clearTimeout(TT.timer); TT.timer = setTimeout(ttSave, 3000); }
 }
 function ttStatus() {
   const el = $("ttSave"); if (!el) return;
@@ -800,12 +809,7 @@ function vTimetable() {
     </div>
   </div>
 
-  <div class="tt-stats">
-    <div><b>${all.length}</b><span>إجمالي الحصص</span></div>
-    <div><b class="okc">${placed}</b><span>موزّعة</span></div>
-    <div><b class="${all.length - placed ? "badc" : ""}">${all.length - placed}</b><span>لم توزّع بعد</span></div>
-    <div><b>${locked}</b><span>مثبتة</span></div>
-  </div>
+  <div class="tt-stats" id="ttStats">${ttStatsHTML()}</div>
   ${overT.length || overC.length ? `<div class="notice bad">${overT.map(([id, n]) => esc(tf("المعلم {0} لديه {1} حصة والأسبوع فيه {2} حصة فقط", teacherOf(id)?.name, n, cap))).join("<br>")}${overT.length && overC.length ? "<br>" : ""}${overC.map(([id, n]) => esc(tf("الشعبة {0} لديها {1} حصة والأسبوع فيه {2} حصة فقط", secLabel(section(id)), n, cap))).join("<br>")}</div>` : ""}
 
   <div class="card tt-card">
@@ -827,6 +831,28 @@ function vTimetable() {
   <div class="sel-bar hidden" id="selBar"></div>`;
 }
 
+function ttStatsHTML() {
+  const all = TT.lessons || [], placed = all.filter(x => x.d != null).length, locked = all.filter(x => x.l).length;
+  return `<div><b>${all.length}</b><span>${tr("إجمالي الحصص")}</span></div>
+    <div><b class="okc">${placed}</b><span>${tr("موزّعة")}</span></div>
+    <div><b class="${all.length - placed ? "badc" : ""}">${all.length - placed}</b><span>${tr("لم توزّع بعد")}</span></div>
+    <div><b>${locked}</b><span>${tr("مثبتة")}</span></div>`;
+}
+// تحديث سريع بعد أي تعديل (بدون إعادة بناء الصفحة)
+function ttRefresh() {
+  ttDraw();
+  const st = $("ttStats"); if (st) st.innerHTML = ttStatsHTML();
+  const sel = $("ttSel");
+  if (sel) {
+    const un = new Map();
+    for (const x of TT.lessons) if (x.d == null) { const k = TV.mode === "teacher" ? x.t : x.c; un.set(k, (un.get(k) || 0) + 1); }
+    [...sel.options].forEach(o => {
+      const base = o.dataset.name || (o.dataset.name = o.textContent.replace(/\s*\(.*\)$/, ""));
+      o.textContent = base + (un.get(o.value) ? ` (${un.get(o.value)} ${tr("غير موزّعة")})` : "");
+    });
+  }
+}
+
 function ttGridHTML(mode, id, opts = {}) {
   const { D, P } = ttDims();
   const st = settings();
@@ -843,6 +869,7 @@ function ttGridHTML(mode, id, opts = {}) {
       cls += " has";
       if (i === sel) cls += " sel";
       if (x.l) cls += " locked";
+      if (opts.interactive && i === TV.flash) cls += " flash";
       inner = `<div class="lsn" style="--c:${sb?.color || "#64748b"}"><b>${esc(main)}</b><small>${esc(sub)}</small>${x.l ? `<i class="lk" data-ic="lock" data-size="12"></i>` : ""}</div>`;
       data += ` data-i="${i}"`;
     }
@@ -865,6 +892,7 @@ function ttGridHTML(mode, id, opts = {}) {
 
 function ttDraw() {
   const grid = $("ttGrid"); if (!grid || !TV.id) return;
+  if (TV.flash != null) { clearTimeout(TV.flashT); TV.flashT = setTimeout(() => { TV.flash = null; }, 1600); }
   const idx = ttIndex();
   ttOrient = innerWidth < 700;
   grid.innerHTML = `<div class="tt-wrap">${ttGridHTML(TV.mode, TV.id, { interactive: true, transpose: ttOrient, idx })}</div>`;
@@ -881,10 +909,10 @@ function ttDraw() {
   if (TV.sel != null) {
     const x = TT.lessons[TV.sel], sb = subject(x.s);
     bar.classList.remove("hidden");
-    bar.innerHTML = `<div class="sb-info"><span class="dot" style="background:${sb?.color}"></span><b>${esc(sb?.name || "")}</b> · ${esc(secLabel(section(x.c)))} · ${esc(shortName(teacherOf(x.t)?.name))}<div class="muted sb-hint">اختر خانة خضراء لنقل الحصة</div></div>
+    bar.innerHTML = `<div class="sb-info"><span class="dot" style="background:${sb?.color}"></span><b>${esc(sb?.name || "")}</b> · ${esc(secLabel(section(x.c)))} · ${esc(shortName(teacherOf(x.t)?.name))}<div class="sb-hint">👆 ${tr("اضغط على خانة خضراء لنقل الحصة")}</div></div>
       <div class="row-actions">
-        ${x.d != null ? `<button class="btn sm" data-sa="lock">${x.l ? "إلغاء التثبيت" : "تثبيت"}</button><button class="btn sm" data-sa="remove">إزالة من الجدول</button>` : ""}
-        <button class="btn sm ghost" data-sa="cancel">إلغاء</button>
+        ${x.d != null ? `<button class="btn sm" data-sa="lock"><span data-ic="lock" data-size="15"></span>${tr(x.l ? "إلغاء التثبيت" : "تثبيت")}</button><button class="btn sm sb-del" data-sa="remove">${tr("حذف من الجدول")}</button>` : ""}
+        <button class="btn sm ghost" data-sa="cancel">${tr("إلغاء")}</button>
       </div>`;
   } else { bar.classList.add("hidden"); bar.innerHTML = ""; }
   fillIcons(document.getElementById("view"));
@@ -904,29 +932,47 @@ BIND.timetable = v => {
   $("ttPrint").onclick = ttPrintMenu;
 
   v.onclick = async e => {
+    if (!TT.lessons) ttSync();
     const chip = e.target.closest(".tray-chip");
     if (chip) { const i = +chip.dataset.i; TV.sel = TV.sel === i ? null : i; return ttDraw(); }
     const sa = e.target.closest("[data-sa]");
     if (sa && TV.sel != null) {
-      const x = TT.lessons[TV.sel];
-      if (sa.dataset.sa === "lock") { x.l = !x.l; ttMark(); }
-      if (sa.dataset.sa === "remove") { x.d = x.p = null; x.l = false; ttMark(); }
-      TV.sel = null; return render();
+      const x = TT.lessons[TV.sel], label = `${subject(x.s)?.name || ""} (${secLabel(section(x.c))})`;
+      if (sa.dataset.sa === "cancel") { TV.sel = null; return ttDraw(); }
+      if (sa.dataset.sa === "lock") {
+        x.l = !x.l; TV.sel = null; TV.flash = TT.lessons.indexOf(x); ttMark(); ttRefresh();
+        return toast(x.l ? tf("تم تثبيت الحصة {0}", label) : tf("تم إلغاء تثبيت الحصة {0}", label), "success");
+      }
+      if (sa.dataset.sa === "remove") {
+        TV.sel = null; ttDraw();
+        if (!(await confirmBox(tf("هل أنت متأكد من حذف حصة {0} من الجدول؟ ستنتقل إلى قائمة الحصص غير الموزّعة ويمكنك إعادتها لاحقًا.", label), tr("حذف")))) return;
+        x.d = x.p = null; x.l = false; ttMark(); ttRefresh();
+        return toast(tf("تم حذف الحصة {0} من الجدول", label), "success");
+      }
+      return;
     }
-    const td = e.target.closest("td.tt-cell"); if (!td) return;
+    const td = e.target.closest("td.tt-cell");
+    if (!td) {
+      // ضغط خارج الجدول يلغي التحديد
+      if (TV.sel != null && !e.target.closest("#selBar, .tt-bar, button, select, a")) { TV.sel = null; ttDraw(); }
+      return;
+    }
     const d = +td.dataset.d, p = +td.dataset.p, i = td.dataset.i != null ? +td.dataset.i : null;
-    if (TV.sel == null) { if (i != null) { TV.sel = i; ttDraw(); } return; }
+    if (TV.sel == null) { if (i != null) { TV.sel = i; TV.flash = null; ttDraw(); } return; }
     if (i === TV.sel) { TV.sel = null; return ttDraw(); }
     const r = canMove(TV.sel, d, p, ttIndex());
     if (!r.ok) {
       if (i != null) { TV.sel = i; return ttDraw(); }
+      td.classList.remove("shake"); void td.offsetWidth; td.classList.add("shake");
       if (r.reason) toast(r.reason, "error");
       return;
     }
     const L = TT.lessons[TV.sel];
     if (r.swap != null) { const J = TT.lessons[r.swap]; J.d = L.d; J.p = L.p; }
     L.d = d; L.p = p; L.l = true;
-    TV.sel = null; ttMark(); render();
+    TV.sel = null; TV.flash = TT.lessons.indexOf(L);
+    ttMark(); ttRefresh();
+    toast(r.swap != null ? tr("تم تبديل الحصتين وتثبيتهما 🔒") : tr("تم نقل الحصة وتثبيتها 🔒"), "success");
   };
 };
 

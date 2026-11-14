@@ -245,5 +245,10 @@ export const EN = {
   "مراجعة البيانات قبل الاستيراد": "Review data before importing", "حصص الجدول": "Timetable periods", "الصفوف": "Grades", "ملاحظات": "Notes",
   "حصة بدون رقم شعبة لم تُستورد": "periods without a section number were not imported",
   "حصة مشتركة بين معلمَين لنفس الشعبة في نفس الوقت — بقيت لمعلم واحد": "co-taught periods (two teachers, same section, same time) were kept for one teacher only",
-  "حصة مكررة للمعلم في نفس الوقت — أُخذت الأولى فقط": "duplicate periods for the same teacher at the same time — only the first was kept"
+  "حصة مكررة للمعلم في نفس الوقت — أُخذت الأولى فقط": "duplicate periods for the same teacher at the same time — only the first was kept",
+  "اضغط على خانة خضراء لنقل الحصة": "Tap a green slot to move this period", "حذف من الجدول": "Remove from timetable",
+  "تم تثبيت الحصة {0}": "Locked {0}", "تم إلغاء تثبيت الحصة {0}": "Unlocked {0}",
+  "هل أنت متأكد من حذف حصة {0} من الجدول؟ ستنتقل إلى قائمة الحصص غير الموزّعة ويمكنك إعادتها لاحقًا.": "Are you sure you want to remove {0} from the timetable? It will move to the unplaced list and you can put it back later.",
+  "تم حذف الحصة {0} من الجدول": "{0} removed from the timetable",
+  "تم تبديل الحصتين وتثبيتهما 🔒": "Periods swapped and locked 🔒", "تم نقل الحصة وتثبيتها 🔒": "Period moved and locked 🔒"
 };

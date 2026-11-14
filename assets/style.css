@@ -380,7 +380,6 @@ table.tt.tr { min-width: 0; }
   .tt.tr th.dh { font-size: .72rem; }
   .lsn .lk { top: 1px; inset-inline-end: 1px; }
   .sel-bar { padding: .55rem .7rem; gap: .5rem; border-radius: 14px; font-size: .85rem; }
-  .sel-bar .sb-hint { display: none; }
   .sel-bar .row-actions { width: 100%; }
   .sel-bar .row-actions .btn { flex: 1; }
   body.has-sel .main { padding-bottom: 230px; }
@@ -504,3 +503,21 @@ table.tt.tr { min-width: 0; }
 .imp-more { margin-bottom: .6rem; } .imp-more summary { cursor: pointer; font-weight: 700; } .imp-more p { max-height: 160px; overflow: auto; margin: .4rem 0 0; }
 .notice ul { margin: .3rem 0 0; padding-inline-start: 1.2rem; }
 .print-opts .btn { justify-content: flex-start; }
+
+/* ردود فعل الضغط */
+.btn:active, .tray-chip:active, .seg button:active, .icon-btn:active { transform: scale(.96); }
+.tt-cell:active .lsn { transform: scale(.97); }
+.tt-cell.flash .lsn { animation: ttFlash 1.4s ease; }
+@keyframes ttFlash { 0% { box-shadow: 0 0 0 0 rgba(20,184,166,.9); transform: scale(1.06); } 40% { box-shadow: 0 0 0 6px rgba(20,184,166,.35); transform: scale(1); } 100% { box-shadow: 0 0 0 0 rgba(20,184,166,0); } }
+.tt-cell.shake { animation: ttShake .35s; }
+@keyframes ttShake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.sel-bar { animation: selIn .18s ease; }
+@keyframes selIn { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.sel-bar .sb-hint { color: #99f6e4; font-size: .82rem; margin-top: .15rem; }
+.sel-bar .btn [data-ic] { display: inline-grid; }
+.sel-bar .sb-del { color: #fecaca; }
+.sel-bar .sb-del:hover { background: rgba(220,38,38,.35); }
+@media (max-width: 900px) {
+  .sel-bar .sb-info { font-size: .82rem; line-height: 1.4; }
+  .sel-bar .row-actions .btn { padding: .45em .5em; font-size: .8rem; }
+}
