@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap");
 
 :root {
   --primary: #0b4a8b;
@@ -22,7 +22,7 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
-  margin: 0; font-family: "Tajawal", system-ui, sans-serif; color: var(--ink);
+  margin: 0; font-family: "IBM Plex Sans Arabic", "Tajawal", system-ui, sans-serif; color: var(--ink);
   background: var(--bg); line-height: 1.7; font-size: 16px;
 }
 a { color: var(--primary); text-decoration: none; }
@@ -454,7 +454,7 @@ table.tt.tr { min-width: 0; }
 .chip .pcount { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 0 .4em; font-size: .75rem; font-weight: 700; color: var(--primary); margin-inline-start: .25em; white-space: nowrap; }
 
 /* ============ Timetable sheet (print + PDF download) ============ */
-.sheet { font-family: "Tajawal", system-ui, sans-serif; background: #fff; color: #0f172a; width: 100%; box-sizing: border-box; padding: 18px 20px 14px; border-radius: 14px; }
+.sheet { font-family: "IBM Plex Sans Arabic", "Tajawal", system-ui, sans-serif; background: #fff; color: #0f172a; width: 100%; box-sizing: border-box; padding: 18px 20px 14px; border-radius: 14px; }
 .sheet-render { position: fixed; top: 0; left: -12000px; width: 1123px; z-index: -1; }
 .sheet-render .sheet { width: 1123px; min-height: 780px; display: flex; flex-direction: column; }
 /* 6 جداول في الصفحة: ورقة مربعة تقريبًا بخط أكبر نسبيًا */
@@ -647,4 +647,19 @@ table.tt.tr { min-width: 0; }
 .ld-side { display: flex; align-items: center; gap: .5rem; }
 .ld-n { font-weight: 800; font-size: .95rem; }
 .ld-row .load-bar { grid-column: 1 / -1; height: 6px; min-width: 0; }
-#ldMore { margin-top: .6rem; }
+.ld-card { padding: 0; overflow: hidden; }
+.ld-head { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: 1.1rem 1.25rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ld-head h3 { margin: 0 0 .1rem; }
+.ld-head .muted { font-size: .85rem; }
+.ld-head:focus-visible { outline: 2px solid var(--primary-2); outline-offset: -2px; border-radius: var(--radius); }
+.ld-sum { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; }
+.ld-chev { width: 30px; height: 30px; border-radius: 50%; background: var(--primary-soft); position: relative; flex-shrink: 0; transition: transform .2s; }
+.ld-chev::after { content: ""; position: absolute; inset: 0; margin: auto; width: 8px; height: 8px; border: solid var(--primary); border-width: 0 2.5px 2.5px 0; transform: translateY(-2px) rotate(45deg); }
+.ld-card.open .ld-chev { transform: rotate(180deg); }
+.ld-body { display: none; padding: 0 1.25rem 1rem; border-top: 1px solid var(--line); padding-top: .9rem; }
+.ld-card.open .ld-body { display: block; animation: selIn .18s ease; }
+.ld-list { max-height: min(58vh, 520px); overflow-y: auto; overscroll-behavior: contain; padding-inline-end: .2rem; }
+.ld-count { font-size: .82rem; margin: -.3rem 0 .3rem; }
+.ld-count:empty { display: none; }
+@media (max-width: 640px) { .ld-head { padding: 1rem; } .ld-body { padding: .8rem 1rem 1rem; } .ld-head .muted { display: none; } }
+

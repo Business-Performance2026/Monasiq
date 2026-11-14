@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141701";
-import { setLang } from "./i18n.js?v=202611141701";
-import { schedule, reconcile } from "./scheduler.js?v=202611141701";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141701";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141701";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141701";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141701";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141712";
+import { setLang } from "./i18n.js?v=202611141712";
+import { schedule, reconcile } from "./scheduler.js?v=202611141712";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141712";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141712";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141712";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141712";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -141,25 +141,29 @@ function vOverview() {
     const st = k === "bad" ? `<span class="badge bad">${esc(tf("زائد {0}", l - max))}</span>` : k === "warn" ? `<span class="badge warn">${esc(tf("ناقص {0}", max - l))}</span>` : k === "ok" ? `<span class="badge ok">مكتمل</span>` : "";
     const subs = [...new Set([t.subjectId, ...(t.assignments || []).map(a => a.subjectId)])].map(id => subject(id)?.name).filter(Boolean);
     const secs = [...new Set((t.assignments || []).map(a => a.sectionId))].map(id => secById.get(id)).filter(Boolean).map(secLabel);
-    const q = [t.name, ...subs, ...secs].join(" ").toLowerCase();
-    return { k, html: `<div class="ld-row" data-k="${k}" data-q="${esc(q)}">
+    const q = norm([t.name, ...subs, ...secs].join(" "));
+    return { k, q, html: `<div class="ld-row" data-k="${k}" data-q="${esc(q)}">
       <div class="ld-main" dir="auto"><b data-no-i18n dir="auto">${esc(t.name)}</b><small>${esc(subs[0] || "—")}${secs.length ? ` · <span data-no-i18n>${esc(secs.slice(0, 6).join("، "))}${secs.length > 6 ? "…" : ""}</span>` : ""}</small></div>
       <div class="ld-side"><span class="ld-n">${l}/${max || "-"}</span>${st}</div>
       <div class="load-bar ${k === "bad" ? "over" : ""}"><i style="width:${pct}%"></i></div></div>` };
   });
-  const tCount = k => tItems.filter(x => k === "all" || x.k === k).length;
 
   const cap = capacity();
-  const sRows = S.sections.map(sec => {
+  const sItems = S.sections.map(sec => {
     const req = S.subjects.reduce((a, s) => a + num(s.periods?.[sec.gradeId]), 0);
     const asg = assignedFor(sec.id);
     const missing = S.subjects.filter(s => num(s.periods?.[sec.gradeId]) > 0)
       .map(s => ({ s, need: num(s.periods[sec.gradeId]), have: asg.bySub[s.id] || 0 }))
       .filter(x => x.have < x.need);
-    const st = asg.total > cap ? `<span class="badge bad">يتجاوز ${cap}</span>` : missing.length ? `<span class="badge warn">ناقص</span>` : req ? `<span class="badge ok">مكتمل</span>` : `<span class="badge info">—</span>`;
-    return `<tr><td><b>${esc(secLabel(sec))}</b></td><td>${asg.total} / ${req}</td><td>${st}</td>
-      <td>${missing.map(m => `<span class="chip"><span class="dot" style="background:${m.s.color}"></span>${esc(m.s.name)} ${m.have}/${m.need}</span>`).join("") || "<span class='muted'>—</span>"}</td></tr>`;
-  }).join("");
+    const k = asg.total > cap ? "bad" : missing.length ? "warn" : req ? "ok" : "none";
+    const st = k === "bad" ? `<span class="badge bad">${esc(tf("يتجاوز {0}", cap))}</span>` : k === "warn" ? `<span class="badge warn">ناقص</span>` : k === "ok" ? `<span class="badge ok">مكتمل</span>` : "";
+    const pct = req ? Math.min(100, asg.total / req * 100) : 0;
+    const q = norm([secLabel(sec), S.grades.find(g => g.id === sec.gradeId)?.name, ...missing.map(m => m.s.name)].join(" "));
+    return { k, q, html: `<div class="ld-row" data-k="${k}" data-q="${esc(q)}">
+      <div class="ld-main"><b data-no-i18n>${esc(secLabel(sec))}</b><small>${missing.length ? missing.map(m => `${esc(m.s.name)} ${m.have}/${m.need}`).join("، ") : esc(tr("كل المواد مُسندة"))}</small></div>
+      <div class="ld-side"><span class="ld-n">${asg.total}/${req}</span>${st}</div>
+      <div class="load-bar ${k === "bad" ? "over" : ""}"><i style="width:${pct}%"></i></div></div>` };
+  });
 
   return `
   <div class="page-title"><h1>${esc(tf("أهلًا، {0}", S.school.principal || S.school.name))} 👋</h1></div>
@@ -174,20 +178,31 @@ function vOverview() {
     ${steps.map((s, i) => `<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem 0">
       <span class="badge ${s[0] ? "ok" : "warn"}">${s[0] ? "✔" : i + 1}</span>
       <a href="${s[1]}">${s[2]}</a></div>`).join("")}</div>` : ""}
-  <div class="card">
-    <div class="card-head"><h3>نصاب المعلمين</h3><span class="muted">${tf("{0} أيام × {1} حصص = {2} حصة أسبوعيًا لكل شعبة", settings().days.length, settings().periods.length, cap)}</span></div>
-    ${S.teachers.length ? `<div class="ld-tools">
-      <input type="search" id="ldQ" placeholder="${esc(tr("ابحث باسم المعلم أو المادة أو الشعبة"))}">
-      <div class="ld-filters" id="ldF">
-        ${[["all", "الكل"], ["warn", "ناقص"], ["ok", "مكتمل"], ["bad", "زائد"]].filter(([k]) => k !== "bad" || tCount(k)).map(([k, n]) => `<button data-k="${k}" class="${k === "all" ? "on" : ""}">${n} <span>${tCount(k)}</span></button>`).join("")}
-      </div></div>
-      <div class="ld-list" id="ldList">${tItems.map(x => x.html).join("")}</div>
-      <div class="empty hidden" id="ldEmpty">لا توجد نتائج</div>
-      <button class="btn block hidden" id="ldMore"></button>` : `<div class="empty">لم يتم إضافة معلمين بعد</div>`}
-  </div>
-  <div class="card">
-    <div class="card-head"><h3>تغطية الشعب</h3><span class="muted">هل كل مواد الشعبة مُسندة لمعلمين؟</span></div>
-    ${S.sections.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>الشعبة</th><th>مُسند / مطلوب</th><th>الحالة</th><th>مواد غير مكتملة</th></tr></thead><tbody>${sRows}</tbody></table></div>` : `<div class="empty">لم يتم إضافة شعب بعد</div>`}
+  ${S.teachers.length ? ldBlock("ldT", "نصاب المعلمين", tf("{0} أيام × {1} حصص = {2} حصة أسبوعيًا لكل شعبة", settings().days.length, settings().periods.length, cap), "ابحث باسم المعلم أو المادة أو الشعبة", tItems)
+    : `<div class="card"><h3>نصاب المعلمين</h3><div class="empty">لم يتم إضافة معلمين بعد</div></div>`}
+  ${S.sections.length ? ldBlock("ldS", "تغطية الشعب", "هل كل مواد الشعبة مُسندة لمعلمين؟", "ابحث بالشعبة أو الصف أو المادة الناقصة", sItems)
+    : `<div class="card"><h3>تغطية الشعب</h3><div class="empty">لم يتم إضافة شعب بعد</div></div>`}`;
+}
+// بطاقة قابلة للطي: ملخص بالأعداد، وعند الفتح بحث + فلاتر + قائمة بارتفاع محدود
+function ldBlock(id, title, sub, ph, items) {
+  const cnt = k => items.filter(x => k === "all" || x.k === k).length;
+  const open = (() => { try { return localStorage.getItem("ov_" + id) === "1"; } catch { return false; } })();
+  const sum = [["warn", "ناقص"], ["ok", "مكتمل"], ["bad", "زائد"]].filter(([k]) => cnt(k)).map(([k, n]) => `<span class="badge ${k}">${esc(tr(n))} ${cnt(k)}</span>`).join("");
+  return `<div class="card ld-card ${open ? "open" : ""}" data-ld="${id}">
+    <button class="ld-head" type="button" aria-expanded="${open}">
+      <div><h3>${esc(tr(title))}</h3><span class="muted">${esc(sub)}</span></div>
+      <div class="ld-sum">${sum}<span class="ld-chev"></span></div>
+    </button>
+    <div class="ld-body">
+      <div class="ld-tools">
+        <input type="search" class="ld-q" placeholder="${esc(tr(ph))}" autocomplete="off">
+        <div class="ld-filters">
+          ${[["all", "الكل"], ["warn", "ناقص"], ["ok", "مكتمل"], ["bad", "زائد"]].filter(([k]) => k !== "bad" || cnt(k)).map(([k, n]) => `<button type="button" data-k="${k}" class="${k === "all" ? "on" : ""}">${n} <span>${cnt(k)}</span></button>`).join("")}
+        </div></div>
+      <div class="ld-count muted"></div>
+      <div class="ld-list">${items.map(x => x.html).join("")}</div>
+      <div class="empty hidden ld-empty">لا توجد نتائج</div>
+    </div>
   </div>`;
 }
 function assignedFor(sectionId) {
@@ -267,30 +282,33 @@ function vSettings() {
 }
 BIND.overview = v => {
   fillIcons(v);
-  const list = v.querySelector("#ldList"); if (!list) return;
-  const rows = [...list.children], q = v.querySelector("#ldQ"), more = v.querySelector("#ldMore"), empty = v.querySelector("#ldEmpty");
-  const PAGE = 10; let k = "all", showAll = false;
-  const apply = () => {
-    const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    let n = 0, shown = 0;
-    for (const r of rows) {
-      const ok = (k === "all" || r.dataset.k === k) && words.every(w => r.dataset.q.includes(w));
-      if (ok) n++;
-      const vis = ok && (showAll || words.length || n <= PAGE);
-      r.classList.toggle("hidden", !vis); if (vis) shown++;
-    }
-    empty.classList.toggle("hidden", n > 0);
-    more.classList.toggle("hidden", shown >= n);
-    more.textContent = tf("عرض الكل ({0})", n);
-  };
-  q.oninput = () => { showAll = false; apply(); };
-  v.querySelector("#ldF").onclick = e => {
-    const b = e.target.closest("button"); if (!b) return;
-    k = b.dataset.k; showAll = false;
-    v.querySelectorAll("#ldF button").forEach(x => x.classList.toggle("on", x === b)); apply();
-  };
-  more.onclick = () => { showAll = true; apply(); };
-  apply();
+  v.querySelectorAll("[data-ld]").forEach(card => {
+    const id = card.dataset.ld, rows = [...card.querySelectorAll(".ld-row")];
+    const q = card.querySelector(".ld-q"), empty = card.querySelector(".ld-empty"), count = card.querySelector(".ld-count");
+    let k = "all";
+    card.querySelector(".ld-head").onclick = () => {
+      const o = card.classList.toggle("open");
+      card.querySelector(".ld-head").setAttribute("aria-expanded", o);
+      try { localStorage.setItem("ov_" + id, o ? "1" : "0"); } catch {}
+    };
+    const apply = () => {
+      const words = norm(q.value).split(" ").filter(Boolean);
+      let n = 0;
+      for (const r of rows) {
+        const ok = (k === "all" || r.dataset.k === k) && words.every(w => r.dataset.q.includes(w));
+        r.classList.toggle("hidden", !ok); if (ok) n++;
+      }
+      empty.classList.toggle("hidden", n > 0);
+      count.textContent = words.length || k !== "all" ? tf("{0} نتيجة", n) : "";
+      card.querySelector(".ld-list").scrollTop = 0;
+    };
+    q.addEventListener("input", apply); q.addEventListener("search", apply); q.addEventListener("keyup", apply);
+    card.querySelector(".ld-filters").onclick = e => {
+      const b = e.target.closest("button"); if (!b) return;
+      k = b.dataset.k;
+      card.querySelectorAll(".ld-filters button").forEach(x => x.classList.toggle("on", x === b)); apply();
+    };
+  });
 };
 function cleanSettings() {
   const st = settings();
@@ -774,7 +792,8 @@ function teacherRow(t) {
     <td><div class="row-actions"><button class="btn sm" data-act="edit">تعديل</button><button class="btn sm danger" data-act="del">حذف</button></div></td></tr>`;
 }
 function drawTeachers() {
-  const match = t => !tQuery || t.name.includes(tQuery) || (subject(t.subjectId)?.name || "").includes(tQuery);
+  const nq = norm(tQuery).split(" ").filter(Boolean);
+  const match = t => !nq.length || (h => nq.every(w => h.includes(w)))(norm([t.name, t.phone, subject(t.subjectId)?.name, ...(t.assignments || []).map(a => { const x = S.sections.find(z => z.id === a.sectionId); return x ? secLabel(x) : ""; })].join(" ")));
   const list = S.teachers.filter(match);
   const head = `<thead><tr><th>المعلم</th><th>المادة</th><th>الشعب المُسندة</th><th>النصاب</th><th></th></tr></thead>`;
   let groups;
