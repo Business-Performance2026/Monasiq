@@ -319,5 +319,9 @@ export const EN = {
   "{0} قيود": "{0} rules", "القيود": "Rules", "حذف الشعبة": "Delete section",
   "أوقات تفريغ المعلم": "Teacher's unavailable times", "مثل الدراسة — لا توضع له حصص فيها": "e.g. studies — no lessons are placed in them",
   "تفريغ": "Unavailable", "تفريغ: {0}": "Unavailable: {0}", "الحصص {0}-{1}": "Periods {0}-{1}",
-  "المعلم متفرّغ (غير متاح) في هذا الوقت": "The teacher is unavailable at this time"
+  "المعلم متفرّغ (غير متاح) في هذا الوقت": "The teacher is unavailable at this time",
+  "ملف PDF واحد": "One PDF file", "تحميل جداول كل المعلمين PDF": "Download all teacher timetables (PDF)", "تحميل جداول كل الشعب PDF": "Download all section timetables (PDF)",
+  "تحميل جداول المعلمين PDF": "Download teacher timetables (PDF)", "تحميل جداول الشعب PDF": "Download section timetables (PDF)",
+  "جداول المعلمين": "Teacher timetables", "جداول الشعب": "Section timetables", "جارٍ إنشاء ملف {0}": "Creating {0} file",
+  "صفحة {0} من {1}": "Page {0} of {1}", "تم تحميل {0} ({1} صفحة)": "{0} downloaded ({1} pages)"
 };

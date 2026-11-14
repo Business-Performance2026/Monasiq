@@ -1,5 +1,5 @@
 // تصميم ورقة الجدول (طباعة + تحميل PDF) — يُستخدم في لوحة المدرسة ولوحة المعلم
-import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611141429";
+import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611141442";
 
 const DAY_EN = { "الأحد": "Sunday", "الاثنين": "Monday", "الثلاثاء": "Tuesday", "الأربعاء": "Wednesday", "الخميس": "Thursday", "الجمعة": "Friday", "السبت": "Saturday" };
 const dayLabel = d => isEn ? (DAY_EN[d] || d) : d;
@@ -63,7 +63,8 @@ function loadScript(src) {
     document.head.appendChild(s);
   });
 }
-async function buildPdf(sheets) {
+async function buildPdf(sheets, opts = {}) {
+  const { onProgress, signal, scale = 2, quality = 0.9 } = opts;
   await Promise.all([
     loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"),
     loadScript("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")
@@ -75,22 +76,27 @@ async function buildPdf(sheets) {
   const pdf = new window.jspdf.jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
   try {
     for (let i = 0; i < sheets.length; i++) {
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
       host.innerHTML = sheetHTML(sheets[i]);
       const el = host.firstElementChild;
-      const canvas = await window.html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
-      const img = canvas.toDataURL("image/jpeg", 0.9);
+      const canvas = await window.html2canvas(el, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false });
+      const img = canvas.toDataURL("image/jpeg", quality);
       const W = 297, H = 210, m = 8;
       const r = Math.min((W - 2 * m) / canvas.width, (H - 2 * m) / canvas.height);
       const w = canvas.width * r, h = canvas.height * r;
       if (i) pdf.addPage();
       pdf.addImage(img, "JPEG", (W - w) / 2, (H - h) / 2, w, h);
+      onProgress?.(i + 1, sheets.length);
+      await new Promise(r => setTimeout(r, 0)); // إبقاء الصفحة متجاوبة
     }
     return pdf;
   } finally { host.remove(); }
 }
 const safeName = n => String(n).replace(/[\\/:*?"<>|]+/g, "-").trim();
-export async function downloadSheetsPDF(sheets, filename) {
-  (await buildPdf(sheets)).save(safeName(filename) + ".pdf");
+export async function downloadSheetsPDF(sheets, filename, opts = {}) {
+  // الملفات الكبيرة: دقة أقل قليلًا حتى يبقى حجم الملف معقولًا
+  const big = sheets.length > 3;
+  (await buildPdf(sheets, { scale: big ? 1.6 : 2, quality: big ? 0.82 : 0.9, ...opts })).save(safeName(filename) + ".pdf");
 }
 export async function sheetsPdfFile(sheets, filename) {
   const blob = (await buildPdf(sheets)).output("blob");

@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141429";
-import { setLang } from "./i18n.js?v=202611141429";
-import { schedule, reconcile } from "./scheduler.js?v=202611141429";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141429";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141429";
-import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141429";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141429";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141442";
+import { setLang } from "./i18n.js?v=202611141442";
+import { schedule, reconcile } from "./scheduler.js?v=202611141442";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141442";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141442";
+import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js?v=202611141442";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141442";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -241,7 +241,8 @@ function vSettings() {
     <div class="row-actions">
       <button class="btn primary" id="impBtn"><span data-ic="upload" data-size="18"></span>استيراد</button>
       <button class="btn" id="expBtn"><span data-ic="download" data-size="18"></span>تصدير البيانات JSON</button>
-      <button class="btn" id="expPdf"><span data-ic="print" data-size="18"></span>تصدير الجداول PDF</button>
+      <button class="btn" id="expPdfT"><span data-ic="download" data-size="18"></span>تحميل جداول المعلمين PDF</button>
+      <button class="btn" id="expPdfS"><span data-ic="download" data-size="18"></span>تحميل جداول الشعب PDF</button>
     </div>
   </div>`;
 }
@@ -313,11 +314,8 @@ BIND.settings = v => {
     const ok = await importPreview(data, warnings, extra, replace);
     if (ok) await importData(data, replace);
   };
-  $("expPdf").onclick = () => {
-    const sh = allSheets("teacher");
-    if (!sh.length) return toast("لا يوجد جدول موزّع للتصدير بعد", "error");
-    printSheets(sh, 2);
-  };
+  $("expPdfT").onclick = () => downloadAll("teacher");
+  $("expPdfS").onclick = () => downloadAll("section");
   $("expBtn").onclick = exportData;
   $("infoForm").onsubmit = async e => {
     e.preventDefault();
@@ -1451,6 +1449,32 @@ function allSheets(mode) {
   const used = new Set((TT.lessons || []).map(x => mode === "teacher" ? x.t : x.c));
   return (mode === "teacher" ? S.teachers : S.sections).filter(x => used.has(x.id)).map(x => sheetFor(mode, x.id));
 }
+// تحميل كل الجداول في ملف PDF واحد مع شريط تقدّم وإلغاء
+async function downloadAll(mode) {
+  const sheets = allSheets(mode);
+  if (!sheets.length) return toast("لا يوجد جدول موزّع للتصدير بعد", "error");
+  const ctrl = new AbortController();
+  const title = mode === "teacher" ? tr("جداول المعلمين") : tr("جداول الشعب");
+  openModal(`<div class="gen-box"><div class="spinner"></div><h3>${esc(tf("جارٍ إنشاء ملف {0}", title))}</h3>
+    <div class="progress"><i id="dlBar"></i></div><p class="muted" id="dlTxt">${esc(tf("صفحة {0} من {1}", 0, sheets.length))}</p>
+    <button class="btn ghost" id="dlCancel">${tr("إلغاء")}</button></div>`);
+  $("modalBack").dataset.lock = "1";
+  $("dlCancel").onclick = () => ctrl.abort();
+  try {
+    await downloadSheetsPDF(sheets, `${title} - ${S.school.name}`, {
+      signal: ctrl.signal,
+      onProgress: (n, total) => {
+        const b = $("dlBar"); if (b) b.style.width = Math.round(n / total * 100) + "%";
+        const t = $("dlTxt"); if (t) t.textContent = tf("صفحة {0} من {1}", n, total);
+      }
+    });
+    toast(tf("تم تحميل {0} ({1} صفحة)", title, sheets.length), "success");
+  } catch (e) {
+    if (e?.name !== "AbortError") toast(tr("تعذّر إنشاء ملف PDF. استخدم الطباعة ثم «حفظ بتنسيق PDF»."), "error");
+  } finally {
+    delete $("modalBack").dataset.lock; closeModal();
+  }
+}
 function ttPrintMenu() {
   openModal(`${modalHead(tr("طباعة وتحميل"))}
     <div class="print-opts">
@@ -1458,6 +1482,9 @@ function ttPrintMenu() {
       <button class="btn block primary" data-pr="dl"><span data-ic="download" data-size="18"></span>تحميل الجدول المعروض PDF</button>
       <button class="btn block" data-pr="teachers"><span data-ic="print" data-size="18"></span>طباعة جداول كل المعلمين</button>
       <button class="btn block" data-pr="sections"><span data-ic="print" data-size="18"></span>طباعة جداول كل الشعب</button>
+      <div class="print-sep">${tr("ملف PDF واحد")}</div>
+      <button class="btn block primary" data-pr="dlTeachers"><span data-ic="download" data-size="18"></span>تحميل جداول كل المعلمين PDF</button>
+      <button class="btn block primary" data-pr="dlSections"><span data-ic="download" data-size="18"></span>تحميل جداول كل الشعب PDF</button>
     </div>
     <p class="muted" style="margin-bottom:0">للحفظ كملف PDF من الطباعة اختر «حفظ بتنسيق PDF» من نافذة الطباعة.</p>`);
   fillIcons($("modal"));
@@ -1468,6 +1495,8 @@ function ttPrintMenu() {
     if (k === "one") printSheets([sheetFor(TV.mode, TV.id)], 1);
     if (k === "teachers") printSheets(allSheets("teacher"), 2);
     if (k === "sections") printSheets(allSheets("section"), 2);
+    if (k === "dlTeachers") return downloadAll("teacher");
+    if (k === "dlSections") return downloadAll("section");
     if (k === "dl") {
       const sh = sheetFor(TV.mode, TV.id);
       try { toast(tr("جارٍ تجهيز الملف")); await downloadSheetsPDF([sh], sh.title); }
