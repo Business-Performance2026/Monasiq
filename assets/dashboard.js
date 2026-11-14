@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141650";
-import { setLang } from "./i18n.js?v=202611141650";
-import { schedule, reconcile } from "./scheduler.js?v=202611141650";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141650";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141650";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141650";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141650";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js?v=202611141701";
+import { setLang } from "./i18n.js?v=202611141701";
+import { schedule, reconcile } from "./scheduler.js?v=202611141701";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141701";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141701";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141701";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141701";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -134,12 +134,20 @@ function vOverview() {
   const showSteps = steps.some(s => !s[0]);
   const pendingAcc = S.accounts.filter(a => a.status === "pending").length;
 
-  const tRows = S.teachers.map(t => {
+  const secById = new Map(S.sections.map(x => [x.id, x]));
+  const tItems = S.teachers.map(t => {
     const l = load(t), max = num(t.maxLoad) || 0, pct = max ? Math.min(100, (l / max) * 100) : 0;
-    const st = !max ? "" : l > max ? `<span class="badge bad">زائد ${l - max}</span>` : l < max ? `<span class="badge warn">ناقص ${max - l}</span>` : `<span class="badge ok">مكتمل</span>`;
-    return `<tr><td><b>${esc(t.name)}</b></td><td>${esc(subject(t.subjectId)?.name || "—")}</td>
-      <td style="min-width:140px"><div style="display:flex;align-items:center;gap:.5rem"><div class="load-bar ${l > max && max ? "over" : ""}" style="flex:1"><i style="width:${pct}%"></i></div><b>${l}/${max || "-"}</b></div></td><td>${st}</td></tr>`;
-  }).join("");
+    const k = !max ? "none" : l > max ? "bad" : l < max ? "warn" : "ok";
+    const st = k === "bad" ? `<span class="badge bad">${esc(tf("زائد {0}", l - max))}</span>` : k === "warn" ? `<span class="badge warn">${esc(tf("ناقص {0}", max - l))}</span>` : k === "ok" ? `<span class="badge ok">مكتمل</span>` : "";
+    const subs = [...new Set([t.subjectId, ...(t.assignments || []).map(a => a.subjectId)])].map(id => subject(id)?.name).filter(Boolean);
+    const secs = [...new Set((t.assignments || []).map(a => a.sectionId))].map(id => secById.get(id)).filter(Boolean).map(secLabel);
+    const q = [t.name, ...subs, ...secs].join(" ").toLowerCase();
+    return { k, html: `<div class="ld-row" data-k="${k}" data-q="${esc(q)}">
+      <div class="ld-main" dir="auto"><b data-no-i18n dir="auto">${esc(t.name)}</b><small>${esc(subs[0] || "—")}${secs.length ? ` · <span data-no-i18n>${esc(secs.slice(0, 6).join("، "))}${secs.length > 6 ? "…" : ""}</span>` : ""}</small></div>
+      <div class="ld-side"><span class="ld-n">${l}/${max || "-"}</span>${st}</div>
+      <div class="load-bar ${k === "bad" ? "over" : ""}"><i style="width:${pct}%"></i></div></div>` };
+  });
+  const tCount = k => tItems.filter(x => k === "all" || x.k === k).length;
 
   const cap = capacity();
   const sRows = S.sections.map(sec => {
@@ -168,7 +176,14 @@ function vOverview() {
       <a href="${s[1]}">${s[2]}</a></div>`).join("")}</div>` : ""}
   <div class="card">
     <div class="card-head"><h3>نصاب المعلمين</h3><span class="muted">${tf("{0} أيام × {1} حصص = {2} حصة أسبوعيًا لكل شعبة", settings().days.length, settings().periods.length, cap)}</span></div>
-    ${S.teachers.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>المعلم</th><th>المادة</th><th>النصاب</th><th>الحالة</th></tr></thead><tbody>${tRows}</tbody></table></div>` : `<div class="empty">لم يتم إضافة معلمين بعد</div>`}
+    ${S.teachers.length ? `<div class="ld-tools">
+      <input type="search" id="ldQ" placeholder="${esc(tr("ابحث باسم المعلم أو المادة أو الشعبة"))}">
+      <div class="ld-filters" id="ldF">
+        ${[["all", "الكل"], ["warn", "ناقص"], ["ok", "مكتمل"], ["bad", "زائد"]].filter(([k]) => k !== "bad" || tCount(k)).map(([k, n]) => `<button data-k="${k}" class="${k === "all" ? "on" : ""}">${n} <span>${tCount(k)}</span></button>`).join("")}
+      </div></div>
+      <div class="ld-list" id="ldList">${tItems.map(x => x.html).join("")}</div>
+      <div class="empty hidden" id="ldEmpty">لا توجد نتائج</div>
+      <button class="btn block hidden" id="ldMore"></button>` : `<div class="empty">لم يتم إضافة معلمين بعد</div>`}
   </div>
   <div class="card">
     <div class="card-head"><h3>تغطية الشعب</h3><span class="muted">هل كل مواد الشعبة مُسندة لمعلمين؟</span></div>
@@ -250,7 +265,33 @@ function vSettings() {
     </div>
   </div>`;
 }
-BIND.overview = v => fillIcons(v);
+BIND.overview = v => {
+  fillIcons(v);
+  const list = v.querySelector("#ldList"); if (!list) return;
+  const rows = [...list.children], q = v.querySelector("#ldQ"), more = v.querySelector("#ldMore"), empty = v.querySelector("#ldEmpty");
+  const PAGE = 10; let k = "all", showAll = false;
+  const apply = () => {
+    const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let n = 0, shown = 0;
+    for (const r of rows) {
+      const ok = (k === "all" || r.dataset.k === k) && words.every(w => r.dataset.q.includes(w));
+      if (ok) n++;
+      const vis = ok && (showAll || words.length || n <= PAGE);
+      r.classList.toggle("hidden", !vis); if (vis) shown++;
+    }
+    empty.classList.toggle("hidden", n > 0);
+    more.classList.toggle("hidden", shown >= n);
+    more.textContent = tf("عرض الكل ({0})", n);
+  };
+  q.oninput = () => { showAll = false; apply(); };
+  v.querySelector("#ldF").onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    k = b.dataset.k; showAll = false;
+    v.querySelectorAll("#ldF button").forEach(x => x.classList.toggle("on", x === b)); apply();
+  };
+  more.onclick = () => { showAll = true; apply(); };
+  apply();
+};
 function cleanSettings() {
   const st = settings();
   const o = { days: st.days, periods: st.periods };

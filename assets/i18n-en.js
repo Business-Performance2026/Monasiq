@@ -21,7 +21,7 @@ export const EN = {
 
   // الصفحة الرئيسية
   "عن المنصة": "About", "المميزات": "Features", "طريقة التسجيل": "How to register", "أسئلة شائعة": "FAQ",
-  "تسجيل الدخول": "Log in", "سجّل مدرستك": "Register your school", "سجّل كمدرسة": "Register as a school", "لإدارات المدارس": "For school administrations",
+  "تسجيل الدخول": "Log in", "سجّل مدرستك": "Register your school", "سجّل كمدرسة": "Register as a school", "ابحث باسم المعلم أو المادة أو الشعبة": "Search by teacher, subject or section", "عرض الكل ({0})": "Show all ({0})", "لا توجد نتائج": "No results", "زائد {0}": "Over by {0}", "ناقص {0}": "Under by {0}", "لإدارات المدارس": "For school administrations",
   "وزّع جدول الحصص": "Build your timetable", "بدقائق بدل أيام": "in minutes, not days",
   "منصة سحابية تساعد إدارة المدرسة على إدخال المعلمين والصفوف والشعب والمواد، ثم توزيع الحصص على أيام الأسبوع بدون تعارض، وتحميل جدول كل معلم وكل شعبة PDF. تعمل من الكمبيوتر والجوال":
     "is a cloud platform that helps school administrations enter teachers, grades, sections and subjects, distribute periods across the week without conflicts, and download every teacher's and section's timetable as PDF. Works on computers and phones",
