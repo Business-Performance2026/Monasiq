@@ -1,11 +1,11 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141712";
-import { setLang } from "./i18n.js?v=202611141712";
-import { schedule, reconcile } from "./scheduler.js?v=202611141712";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141712";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141712";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141712";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141712";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141722";
+import { setLang } from "./i18n.js?v=202611141722";
+import { schedule, reconcile } from "./scheduler.js?v=202611141722";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141722";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141722";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141722";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141722";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -737,6 +737,7 @@ BIND.subjects = v => {
 //  المعلمون
 // =====================================================
 let tQuery = "";
+let TT_ENTS = [];
 let tDept = "all";
 function vTeachers() {
   return `
@@ -1253,6 +1254,24 @@ function vTimetable() {
     ? S.teachers.filter(t => tLoads.has(t.id) && (!TV.dept || deptsOfTeacher(t).some(x => x.id === TV.dept))).map(t => ({ id: t.id, name: t.name }))
     : S.sections.filter(s => cLoads.has(s.id)).map(s => ({ id: s.id, name: secLabel(s) }));
   if (!ents.some(e => e.id === TV.id)) TV.id = ents[0]?.id || null;
+  // نص البحث لكل عنصر: المعلم = الاسم + مواده + شعبه، الشعبة = اسمها + الصف + موادها + معلميها
+  {
+    const subsOf = new Map(), othersOf = new Map();
+    for (const x of all) {
+      const k = TV.mode === "teacher" ? x.t : x.c, o = TV.mode === "teacher" ? x.c : x.t;
+      if (!subsOf.has(k)) { subsOf.set(k, new Set()); othersOf.set(k, new Set()); }
+      subsOf.get(k).add(x.s); othersOf.get(k).add(o);
+    }
+    for (const e of ents) {
+      const subs = [...(subsOf.get(e.id) || [])].map(id => subject(id)?.name).filter(Boolean);
+      const oth = [...(othersOf.get(e.id) || [])].map(id => TV.mode === "teacher" ? (section(id) ? secLabel(section(id)) : "") : teacherOf(id)?.name).filter(Boolean);
+      const grade = TV.mode === "section" ? S.grades.find(g => g.id === section(e.id)?.gradeId)?.name || "" : "";
+      e.sub = TV.mode === "teacher" ? subs.join("، ") : [grade, subs.length ? tf("{0} مواد", subs.length) : ""].filter(Boolean).join(" · ");
+      e.subs = subs;
+      e.q = norm([e.name, grade, ...subs, ...oth].join(" "));
+    }
+  }
+  TT_ENTS = ents;
   const unByEnt = new Map();
   for (const x of all) if (x.d == null) { const k = TV.mode === "teacher" ? x.t : x.c; unByEnt.set(k, (unByEnt.get(k) || 0) + 1); }
   const pos = ents.findIndex(e => e.id === TV.id);
@@ -1277,6 +1296,11 @@ function vTimetable() {
       </div>
       ${TV.mode === "teacher" && S.departments.length ? `<select id="ttDept" class="tt-dept"><option value="">${tr("كل الأقسام")}</option>${S.departments.map(d => `<option value="${d.id}" ${TV.dept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>` : ""}
       ${TV.mode === "teacher" && teacherOf(TV.id) && teacherPhone(teacherOf(TV.id)) ? `<div class="tt-wa" data-id="${TV.id}">${waBtn(teacherOf(TV.id), "lg")}</div>` : ""}
+      <div class="tt-find">
+        <span class="tt-find-ic" data-ic="search" data-size="18"></span>
+        <input type="search" id="ttFind" autocomplete="off" placeholder="${esc(tr(TV.mode === "teacher" ? "ابحث باسم المعلم أو المادة" : "ابحث باسم الشعبة أو المادة"))}">
+        <div class="tt-find-list hidden" id="ttFindList"></div>
+      </div>
       <div class="tt-pick">
         <button class="icon-btn" id="ttPrev" ${pos <= 0 ? "disabled" : ""}><span data-ic="${isEn ? "chevL" : "chevR"}" data-size="18"></span></button>
         <select id="ttSel">${ents.map(e => `<option value="${e.id}" ${e.id === TV.id ? "selected" : ""}>${esc(e.name)}${unByEnt.get(e.id) ? ` (${unByEnt.get(e.id)} ${tr("غير موزّعة")})` : ""}</option>`).join("")}</select>
@@ -1393,6 +1417,29 @@ BIND.timetable = v => {
   ttDraw();
   $("ttMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; TV.mode = b.dataset.m; TV.id = null; TV.sel = null; render(); };
   $("ttSel").onchange = e => { TV.id = e.target.value; TV.sel = null; render(); };
+  {
+    const inp = $("ttFind"), list = $("ttFindList");
+    const show = () => {
+      const words = norm(inp.value).split(" ").filter(Boolean);
+      if (!words.length) { list.classList.add("hidden"); list.innerHTML = ""; return; }
+      const hits = TT_ENTS.filter(e => words.every(w => e.q.includes(w)));
+      list.innerHTML = hits.length ? hits.slice(0, 40).map(e => `<button type="button" data-id="${esc(e.id)}" class="${e.id === TV.id ? "on" : ""}"><b data-no-i18n>${esc(e.name)}</b>${e.sub ? `<small data-no-i18n>${esc(e.sub)}</small>` : ""}</button>`).join("")
+        + (hits.length > 40 ? `<div class="muted tt-find-more">${esc(tf("و{0} نتيجة أخرى، اكتب أكثر لتضييق البحث", hits.length - 40))}</div>` : "")
+        : `<div class="muted tt-find-more">${esc(tr("لا توجد نتائج"))}</div>`;
+      list.classList.remove("hidden");
+    };
+    inp.addEventListener("input", show); inp.addEventListener("focus", show); inp.addEventListener("search", show);
+    inp.addEventListener("keydown", e => {
+      if (e.key === "Enter") { const b = list.querySelector("button"); if (b) { e.preventDefault(); b.click(); } }
+      if (e.key === "Escape") { inp.value = ""; show(); inp.blur(); }
+    });
+    list.addEventListener("mousedown", e => e.preventDefault());
+    list.onclick = e => { const b = e.target.closest("button[data-id]"); if (!b) return; TV.id = b.dataset.id; TV.sel = null; render(); };
+    document.addEventListener("click", function off(e) {
+      if (!document.body.contains(inp)) return document.removeEventListener("click", off);
+      if (!e.target.closest(".tt-find")) list.classList.add("hidden");
+    });
+  }
   v.querySelector(".tt-wa [data-act=wa]")?.addEventListener("click", e => { e.stopPropagation(); waTeacher(teacherOf(TV.id)); });
   if ($("ttDept")) $("ttDept").onchange = e => { TV.dept = e.target.value || null; TV.id = null; TV.sel = null; render(); };
   const step = k => { const o = [...$("ttSel").options]; const i = o.findIndex(x => x.selected) + k; if (o[i]) { TV.id = o[i].value; TV.sel = null; render(); } };
