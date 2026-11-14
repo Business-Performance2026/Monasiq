@@ -1,13 +1,14 @@
 // لوحة المعلم: جدولي، حصص اليوم، حسابي
 import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js";
 import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js";
+import { buildRules } from "./rules.js";
 import { collection, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 applyBranding();
 const $ = id => document.getElementById(id);
-const S = { acc: null, school: null, tt: [], subjects: [], sections: [], grades: [], teacher: null };
+const S = { acc: null, school: null, tt: [], subjects: [], sections: [], grades: [], departments: [], teacher: null };
 const loaded = new Set();
-const NEED = ["acc", "school", "tt", "subjects", "sections", "grades"];
+const NEED = ["acc", "school", "tt", "subjects", "sections", "grades", "departments", "teacher"];
 const DAY_EN = { "الأحد": "Sun", "الاثنين": "Mon", "الثلاثاء": "Tue", "الأربعاء": "Wed", "الخميس": "Thu", "الجمعة": "Fri", "السبت": "Sat" };
 const shortDay = d => isEn ? (DAY_EN[d] || d) : String(d).replace(/^ال/, "");
 
@@ -19,6 +20,7 @@ else if (role.role !== "teacher") location.replace("login.html");
 else if (role.status !== "active") location.replace("login.html?s=t_" + role.status);
 else init();
 
+let teacherSub = null;
 function init() {
   $("loading").classList.add("hidden");
   $("appRoot").classList.remove("hidden");
@@ -32,6 +34,10 @@ function init() {
     if (!d.exists()) return location.replace("login.html");
     S.acc = { id: d.id, ...d.data() };
     if (S.acc.status !== "active") return location.replace("login.html?s=t_" + S.acc.status);
+    if (S.acc.teacherId && S.acc.teacherId !== teacherSub) {
+      teacherSub = S.acc.teacherId;
+      onSnapshot(doc(db, "schools", sid, "teachers", teacherSub), t => { S.teacher = t.exists() ? { id: t.id, ...t.data() } : null; mark("teacher"); }, () => mark("teacher"));
+    } else if (!S.acc.teacherId) mark("teacher");
     mark("acc");
   }, err);
   onSnapshot(doc(db, "schools", sid), d => {
@@ -40,7 +46,7 @@ function init() {
     mark("school");
   }, err);
   onSnapshot(doc(db, "schools", sid, "timetable", "main"), d => { S.tt = d.exists() ? d.data().lessons || [] : []; mark("tt"); }, err);
-  for (const k of ["subjects", "sections", "grades"]) {
+  for (const k of ["subjects", "sections", "grades", "departments"]) {
     onSnapshot(collection(db, "schools", sid, k), snap => { S[k] = snap.docs.map(x => ({ id: x.id, ...x.data() })); mark(k); }, err);
   }
   window.addEventListener("resize", () => { if (loaded.size >= NEED.length) drawGrid(); });
@@ -51,6 +57,14 @@ const section = id => S.sections.find(s => s.id === id);
 const grade = id => S.grades.find(g => g.id === id);
 const secLabel = s => { if (!s) return "؟"; const g = grade(s.gradeId); return `${s.num}/${g ? g.code : "?"}`; };
 const settings = () => S.school?.settings || { days: DAYS_ALL.slice(0, 5), periods: [] };
+// اجتماعات القسم والحصص الفارغة للجميع
+function blockedMap() {
+  const st = settings(), P = st.periods.length, m = new Map();
+  const r = buildRules({ settings: st, departments: S.departments, teachers: S.teacher ? [S.teacher] : [] });
+  r.globalBlocked.forEach(sl => m.set(sl, tr("فارغة للجميع")));
+  if (S.teacher) r.teachers[S.teacher.id]?.meetings.forEach((n, sl) => { if (!m.has(sl)) m.set(sl, tf("اجتماع {0}", n)); });
+  return m;
+}
 const mine = () => S.acc?.teacherId ? S.tt.filter(x => x.t === S.acc.teacherId && x.d != null) : [];
 
 function render() {
@@ -122,8 +136,10 @@ function render() {
 function gridHTML(transpose) {
   const st = settings(), D = st.days.length, P = st.periods.length;
   const map = new Map(mine().map(x => [`${x.d}.${x.p}`, x]));
+  const blk = blockedMap();
   const cell = (d, p) => {
     const x = map.get(`${d}.${p}`);
+    if (!x && blk.has(d * P + p)) return `<td class="tt-cell ro blk"><div class="blk-l">🔒 ${esc(blk.get(d * P + p))}</div></td>`;
     if (!x) return `<td class="tt-cell ro"></td>`;
     const sb = subject(x.s);
     return `<td class="tt-cell has ro"><div class="lsn" style="--c:${sb?.color || "#64748b"}"><b>${esc(secLabel(section(x.c)))}</b><small>${esc(sb?.name || "")}</small></div></td>`;
@@ -140,7 +156,7 @@ function drawGrid() {
 }
 function mySheet() {
   return buildSheet({
-    kind: "teacher", ownerId: S.acc.teacherId, title: S.acc.name, school: S.school.name || "",
+    kind: "teacher", ownerId: S.acc.teacherId, title: S.acc.name, school: S.school.name || "", blocked: blockedMap(), P: settings().periods.length,
     settings: settings(), lessons: S.tt, subjectOf: subject, sectionLabel: id => secLabel(section(id)), teacherName: () => ""
   });
 }

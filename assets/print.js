@@ -27,6 +27,7 @@ export function sheetHTML(sh, compact = false) {
   const rows = sh.days.map((dn, d) => `<tr><th class="sh-dh"><span>${esc(dayLabel(dn))}</span></th>${Array.from({ length: P }, (_, p) => {
     const c = sh.cells.get(`${d}.${p}`);
     if (!c) return `<td class="sh-c sh-empty"></td>`;
+    if (c.blocked) return `<td class="sh-c"><div class="sh-l sh-blk"><small>🔒 ${esc(c.main)}</small></div></td>`;
     return `<td class="sh-c"><div class="sh-l" style="background:${tint(c.color, .16)};border-color:${c.color}"><b style="color:${tint(c.color, .95)}">${esc(c.main)}</b><small>${esc(c.sub || "")}</small></div></td>`;
   }).join("")}</tr>`).join("");
   const kindLabel = sh.kind === "teacher" ? L("جدول المعلم") : L("جدول الشعبة");
@@ -89,8 +90,9 @@ export async function downloadSheetsPDF(sheets, filename) {
 }
 
 // بناء ورقة من بيانات الجدول
-export function buildSheet({ kind, ownerId, title, school, settings, lessons, subjectOf, sectionLabel, teacherName }) {
+export function buildSheet({ kind, ownerId, title, school, settings, lessons, subjectOf, sectionLabel, teacherName, blocked, P }) {
   const cells = new Map(), legend = new Map(), secs = new Set();
+  if (blocked) blocked.forEach((label, sl) => cells.set(`${Math.floor(sl / P)}.${sl % P}`, { main: label, sub: "", color: "#94a3b8", blocked: true }));
   const mine = lessons.filter(x => x.d != null && (kind === "teacher" ? x.t : x.c) === ownerId);
   for (const x of mine) {
     const sb = subjectOf(x.s);

@@ -2,6 +2,7 @@
 import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS } from "./app.js";
 import { setLang } from "./i18n.js";
 import { schedule, reconcile } from "./scheduler.js";
+import { buildRules, slotViolation, precheck, teacherDepts } from "./rules.js";
 import { buildSheet, printSheets, downloadSheetsPDF } from "./print.js";
 import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js";
 import {
@@ -14,8 +15,8 @@ applyBranding();
 // ---------- الحالة ----------
 let SID, pubLast = "";
 const loaded = new Set();
-const NEED = 6; // school, grades, sections, subjects, teachers, timetable
-const S = { school: null, grades: [], sections: [], subjects: [], teachers: [], accounts: [] };
+const NEED = 7; // school, grades, sections, subjects, teachers, departments, timetable
+const S = { school: null, grades: [], sections: [], subjects: [], teachers: [], departments: [], accounts: [] };
 const $ = id => document.getElementById(id);
 const col = name => collection(db, "schools", SID, name);
 const dref = (name, id) => doc(db, "schools", SID, name, id);
@@ -63,7 +64,8 @@ function init(user) {
     grades: (a, b) => num(a.code) - num(b.code) || a.name.localeCompare(b.name, "ar"),
     sections: (a, b) => (num(grade(a.gradeId)?.code) - num(grade(b.gradeId)?.code)) || num(a.num) - num(b.num),
     subjects: (a, b) => a.name.localeCompare(b.name, "ar"),
-    teachers: (a, b) => a.name.localeCompare(b.name, "ar")
+    teachers: (a, b) => a.name.localeCompare(b.name, "ar"),
+    departments: (a, b) => a.name.localeCompare(b.name, "ar")
   };
   onSnapshot(query(collection(db, "teacherAccounts"), where("schoolId", "==", SID)), snap => {
     S.accounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -82,7 +84,7 @@ function init(user) {
     TT.lastJSON = js; TT.lessons = null; TV.sel = null;
     if (location.hash === "#timetable") render();
   }, e => { toast(errMsg(e), "error"); mark("timetable"); });
-  for (const k of ["grades", "sections", "subjects", "teachers"]) {
+  for (const k of ["grades", "sections", "subjects", "teachers", "departments"]) {
     onSnapshot(col(k), snap => {
       S[k] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       S[k].sort(sorters[k]);
@@ -93,12 +95,12 @@ function init(user) {
 }
 
 // ---------- التوجيه ----------
-const VIEWS = { overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable, accounts: vAccounts };
+const VIEWS = { departments: vDepartments, overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable, accounts: vAccounts };
 function render() {
   if (loaded.size < NEED) return;
   const v = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
   document.querySelectorAll("#nav a, #bnav a, #sheet a").forEach(a => a.classList.toggle("active", a.dataset.v === v));
-  document.querySelector("[data-more]").classList.toggle("active", v === "settings" || v === "grades" || v === "accounts");
+  document.querySelector("[data-more]").classList.toggle("active", v === "settings" || v === "grades" || v === "accounts" || v === "departments");
   const view = $("view");
   view.onclick = null;
   document.body.classList.remove("has-sel");
@@ -206,6 +208,16 @@ function vSettings() {
     <div class="table-wrap" style="margin-top:1rem"><table class="tbl periods-tbl"><thead><tr><th>الحصة</th><th>من</th><th>إلى</th></tr></thead><tbody id="pBody"></tbody></table></div>
     <div class="modal-actions"><button class="btn primary" id="saveSettings">💾 حفظ إعدادات الدوام</button></div>
   </div>
+  <div class="card" id="rulesCard">
+    <h3>قيود التوزيع العامة</h3>
+    <p class="muted" style="margin-top:0">تطبّق على جميع المعلمين عند التوزيع التلقائي، ويمكن تخصيصها لكل معلم من نافذة المعلم.</p>
+    <label>حصص فارغة لجميع المعلمين <small class="muted">(${tr("لا توضع فيها أي حصة")})</small></label>
+    <div id="freeBox"></div>
+    <label style="margin-top:1rem">${tr("الحد العام: أقصى عدد مرات لكل حصة للمعلم في الأسبوع")} <small class="muted">(${tr("فارغ = بدون حد")})</small></label>
+    <div class="pmax-grid">${st.periods.map((_, p) => `<label class="pmax"><span>${tf("الحصة {0}", p + 1)}</span><input type="number" min="0" max="${st.days.length}" data-gpm="${p}" value="${st.periodMax?.[p] ?? ""}" placeholder="∞"></label>`).join("")}</div>
+    <div class="field" style="margin-top:.8rem;max-width:280px"><label>${tr("أقصى عدد حصص متتالية لأي معلم")}</label><input type="number" id="gMaxRun" min="1" max="8" value="${st.maxRun || ""}" placeholder="∞"></div>
+    <div class="modal-actions"><button class="btn primary" id="saveRules">💾 ${tr("حفظ قيود التوزيع")}</button></div>
+  </div>
   <div class="card">
     <h3>بيانات المدرسة</h3>
     <form id="infoForm">
@@ -233,7 +245,27 @@ function vSettings() {
   </div>`;
 }
 BIND.overview = v => fillIcons(v);
+function cleanSettings() {
+  const st = settings();
+  const o = { days: st.days, periods: st.periods };
+  if (st.freeAll) o.freeAll = st.freeAll;
+  if (st.periodMax) o.periodMax = st.periodMax;
+  if (st.maxRun) o.maxRun = st.maxRun;
+  return o;
+}
 BIND.settings = v => {
+  const freeAll = (settings().freeAll || []).map(m => ({ ...m }));
+  const drawFree = () => { $("freeBox").innerHTML = slotPicker("freeList", freeAll); bindSlots($("freeBox"), freeAll, drawFree); };
+  drawFree();
+  $("saveRules").onclick = async () => {
+    const pm = {};
+    v.querySelectorAll("[data-gpm]").forEach(i => { if (i.value !== "") pm[i.dataset.gpm] = Math.max(0, num(i.value)); });
+    const mr = $("gMaxRun").value === "" ? 0 : Math.max(1, num($("gMaxRun").value));
+    try {
+      await updateDoc(doc(db, "schools", SID), { settings: { ...cleanSettings(), freeAll, periodMax: pm, maxRun: mr }, updatedAt: serverTimestamp() });
+      toast("تم حفظ قيود التوزيع", "success");
+    } catch (e) { toast(errMsg(e), "error"); }
+  };
   const drawP = () => {
     $("pBody").innerHTML = draftPeriods.map((p, i) => `<tr><td><b>${i + 1}</b></td>
       <td><input type="time" data-i="${i}" data-k="start" value="${p.start}"></td>
@@ -251,7 +283,7 @@ BIND.settings = v => {
     if (!days.length) return toast("اختر يومًا واحدًا على الأقل", "error");
     if (!draftPeriods.length) return toast("أضف حصة واحدة على الأقل", "error");
     try {
-      await updateDoc(doc(db, "schools", SID), { settings: { days, periods: draftPeriods }, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, "schools", SID), { settings: { ...cleanSettings(), days, periods: draftPeriods }, updatedAt: serverTimestamp() });
       toast("تم حفظ إعدادات الدوام", "success");
     } catch (e) { toast(errMsg(e), "error"); }
   };
@@ -348,7 +380,7 @@ async function importData(data, replace) {
       const cur = settings().periods;
       const periods = data.settings.periods?.length ? data.settings.periods
         : (cur.length === data.settings.periodsCount ? cur : defaultPeriods(data.settings.periodsCount, cur[0]?.start || "08:00"));
-      await updateDoc(doc(db, "schools", SID), { settings: { days: data.settings.days, periods }, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, "schools", SID), { settings: { ...cleanSettings(), ...(data.settings.freeAll ? { freeAll: data.settings.freeAll } : {}), days: data.settings.days, periods }, updatedAt: serverTimestamp() });
     }
     // معرّفات جديدة لكل عنصر قبل الكتابة
     const id = {};
@@ -580,30 +612,57 @@ BIND.subjects = v => {
 //  المعلمون
 // =====================================================
 let tQuery = "";
+let tDept = "all";
 function vTeachers() {
   return `
   <div class="page-title"><h1>المعلمون</h1>
     <div class="row-actions"><input id="tSearch" placeholder="بحث..." value="${esc(tQuery)}" style="max-width:200px"><button class="btn primary" id="addT">+ إضافة معلم</button></div></div>
   ${!S.subjects.length || !S.sections.length ? `<div class="notice warn">يُفضّل إضافة <a href="#grades">الشعب</a> و<a href="#subjects">المواد</a> أولًا حتى تستطيع إسنادها للمعلمين.</div>` : ""}
-  <div class="card" id="tList"></div>`;
+  ${S.departments.length ? `<div class="tabs dept-tabs" id="tDeptTabs">
+    <button data-d="all" class="${tDept === "all" ? "active" : ""}">${tr("كل الأقسام")}</button>
+    ${S.departments.map(d => `<button data-d="${d.id}" class="${tDept === d.id ? "active" : ""}"><span class="dot" style="background:${d.color}"></span> ${esc(d.name)}</button>`).join("")}
+    <button data-d="none" class="${tDept === "none" ? "active" : ""}">${tr("بدون قسم")}</button>
+  </div>` : ""}
+  <div id="tList"></div>`;
+}
+function teacherRow(t) {
+  const l = load(t), max = num(t.maxLoad);
+  const r = t.rules || {};
+  const tags = [];
+  if (r.mode && r.mode !== "none") tags.push(tr({ double: "حصص مزدوجة", noConsec: "بدون متتالية", spread: "متباعدة" }[r.mode]));
+  if (r.maxRun) tags.push(tf("أقصى {0} متتالية", r.maxRun));
+  if (r.periodMax && Object.keys(r.periodMax).length) tags.push(tr("حدود حصص"));
+  return `<tr data-id="${t.id}"><td><b>${esc(t.name)}</b>${t.phone ? `<div class="muted" style="font-size:.82rem"><span dir="ltr">${esc(t.phone)}</span></div>` : ""}
+    ${tags.length ? `<div>${tags.map(x => `<span class="badge info rule-tag">${esc(x)}</span>`).join(" ")}</div>` : ""}</td>
+    <td>${esc(subject(t.subjectId)?.name || "—")}</td>
+    <td style="max-width:380px">${(t.assignments || []).map(a => { const sb = subject(a.subjectId);
+      return `<span class="chip" title="${esc(sb?.name || "")}"><span class="dot" style="background:${sb?.color || "#999"}"></span><bdi>${esc(secLabel(section(a.sectionId)))}</bdi><span class="pcount">${esc(tf("{0} حصص", num(a.periods)))}</span></span>`; }).join("") || "<span class='muted'>—</span>"}</td>
+    <td><span class="badge ${max && l > max ? "bad" : max && l === max ? "ok" : "info"}">${l}/${max || "-"}</span></td>
+    <td><div class="row-actions"><button class="btn sm" data-act="edit">تعديل</button><button class="btn sm danger" data-act="del">حذف</button></div></td></tr>`;
 }
 function drawTeachers() {
-  const rows = S.teachers.filter(t => !tQuery || t.name.includes(tQuery) || (subject(t.subjectId)?.name || "").includes(tQuery));
-  $("tList").innerHTML = rows.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>المعلم</th><th>المادة</th><th>الشعب المُسندة</th><th>النصاب</th><th></th></tr></thead><tbody>
-    ${rows.map(t => {
-      const l = load(t), max = num(t.maxLoad);
-      return `<tr data-id="${t.id}"><td><b>${esc(t.name)}</b>${t.phone ? `<div class="muted" style="font-size:.82rem"><span dir="ltr">${esc(t.phone)}</span></div>` : ""}</td>
-      <td>${esc(subject(t.subjectId)?.name || "—")}</td>
-      <td style="max-width:380px">${(t.assignments || []).map(a => { const sb = subject(a.subjectId);
-        return `<span class="chip" title="${esc(sb?.name || "")}"><span class="dot" style="background:${sb?.color || "#999"}"></span><bdi>${esc(secLabel(section(a.sectionId)))}</bdi><span class="pcount">${esc(tf("{0} حصص", num(a.periods)))}</span></span>`; }).join("") || "<span class='muted'>—</span>"}</td>
-      <td><span class="badge ${max && l > max ? "bad" : max && l === max ? "ok" : "info"}">${l}/${max || "-"}</span></td>
-      <td><div class="row-actions"><button class="btn sm" data-act="edit">تعديل</button><button class="btn sm danger" data-act="del">حذف</button></div></td></tr>`;
-    }).join("")}</tbody></table></div>`
-    : `<div class="empty"><div class="big">👩‍🏫</div>${S.teachers.length ? "لا نتائج" : "لم تتم إضافة معلمين بعد"}</div>`;
+  const match = t => !tQuery || t.name.includes(tQuery) || (subject(t.subjectId)?.name || "").includes(tQuery);
+  const list = S.teachers.filter(match);
+  const head = `<thead><tr><th>المعلم</th><th>المادة</th><th>الشعب المُسندة</th><th>النصاب</th><th></th></tr></thead>`;
+  let groups;
+  if (!S.departments.length) groups = [{ name: null, rows: list }];
+  else if (tDept === "all") {
+    groups = S.departments.map(d => ({ d, rows: list.filter(t => deptsOfTeacher(t).some(x => x.id === d.id)) }));
+    groups.push({ none: true, rows: list.filter(t => !deptsOfTeacher(t).length) });
+    groups = groups.filter(g => g.rows.length);
+  } else if (tDept === "none") groups = [{ none: true, rows: list.filter(t => !deptsOfTeacher(t).length) }];
+  else { const d = deptOf(tDept); groups = d ? [{ d, rows: list.filter(t => deptsOfTeacher(t).some(x => x.id === d.id)) }] : [{ rows: list }]; }
+  const total = groups.reduce((a, g) => a + g.rows.length, 0);
+  $("tList").innerHTML = total ? groups.map(g => `<div class="card t-group">
+    ${g.d || g.none ? `<div class="t-group-head" style="--c:${g.d?.color || "#94a3b8"}"><h3><span class="dot" style="background:${g.d?.color || "#94a3b8"}"></span> ${esc(g.d ? g.d.name : tr("بدون قسم"))}</h3>
+      <span class="muted">${esc(tf("{0} معلم · {1} حصة أسبوعيًا", g.rows.length, g.rows.reduce((a, t) => a + load(t), 0)))}</span></div>` : ""}
+    <div class="table-wrap"><table class="tbl">${head}<tbody>${g.rows.map(teacherRow).join("")}</tbody></table></div></div>`).join("")
+    : `<div class="card empty"><div class="big">👩‍🏫</div>${S.teachers.length ? "لا نتائج" : "لم تتم إضافة معلمين بعد"}</div>`;
 }
 BIND.teachers = () => {
   drawTeachers();
   $("tSearch").oninput = e => { tQuery = e.target.value.trim(); drawTeachers(); };
+  if ($("tDeptTabs")) $("tDeptTabs").onclick = e => { const b = e.target.closest("button"); if (!b) return; tDept = b.dataset.d; document.querySelectorAll("#tDeptTabs button").forEach(x => x.classList.toggle("active", x === b)); drawTeachers(); };
   $("addT").onclick = () => teacherModal();
   $("tList").onclick = async e => {
     const b = e.target.closest("[data-act]"); if (!b) return;
@@ -618,6 +677,9 @@ function teacherModal(t) {
   const isNew = !t;
   t = t || { name: "", phone: "", subjectId: "", maxLoad: 20, assignments: [] };
   let asg = (t.assignments || []).map(a => ({ ...a }));
+  const r = t.rules || {};
+  const hasRules = (r.mode && r.mode !== "none") || r.maxRun || (r.periodMax && Object.keys(r.periodMax).length);
+  const autoDepts = new Set(deptsOfTeacher(t).map(d => d.id));
   const subOpts = sel => `<option value="">— اختر —</option>` + S.subjects.map(s => `<option value="${s.id}" ${s.id === sel ? "selected" : ""}>${esc(s.name)}</option>`).join("");
 
   openModal(`${modalHead(isNew ? "إضافة معلم" : "تعديل بيانات المعلم")}
@@ -642,10 +704,32 @@ function teacherModal(t) {
       <div id="aList" style="margin-top:.6rem"></div>
     </div>
 
+    ${S.departments.length ? `<div class="field"><label>الأقسام <small class="muted">(${tr("تلقائي حسب المادة، ويمكن اختيار أكثر من قسم")})</small></label>
+      <div class="sec-pick">${S.departments.map(d => `<label class="check"><input type="checkbox" name="dept" value="${d.id}" ${autoDepts.has(d.id) ? "checked" : ""}> <span class="dot" style="background:${d.color}"></span>${esc(d.name)}</label>`).join("")}</div></div>` : ""}
+
+    <details class="rules-box" ${hasRules ? "open" : ""}>
+      <summary><span data-ic="settings" data-size="16"></span> ${tr("قيود التوزيع لهذا المعلم")}</summary>
+      <label>${tr("أقصى عدد مرات لكل حصة في الأسبوع")} <small class="muted">(${tr("فارغ = حسب إعداد المدرسة")})</small></label>
+      <div class="pmax-grid">${settings().periods.map((_, p) => {
+        const own = r.periodMax?.[p], def = settings().periodMax?.[p];
+        return `<label class="pmax"><span>${tf("الحصة {0}", p + 1)}</span><input type="number" min="0" max="${settings().days.length}" name="pm${p}" value="${own ?? ""}" placeholder="${def ?? "∞"}"></label>`;
+      }).join("")}</div>
+      <div class="grid-3" style="margin-top:.8rem">
+        <div class="field"><label>${tr("نمط الحصص")}</label><select name="mode">
+          ${[["none", "بدون تفضيل"], ["double", "حصتان متتاليتان (مزدوجة)"], ["noConsec", "منع الحصص المتتالية"], ["spread", "توزيع متباعد"]].map(([v, l]) => `<option value="${v}" ${(r.mode || "none") === v ? "selected" : ""}>${tr(l)}</option>`).join("")}
+        </select></div>
+        <div class="field" id="dblField"><label>${tr("عدد الحصص المزدوجة أسبوعيًا")}</label><input type="number" name="doubles" min="1" max="10" value="${r.doubles || 2}"></div>
+        <div class="field"><label>${tr("أقصى عدد حصص متتالية")}</label><input type="number" name="maxRun" min="1" max="8" value="${r.maxRun ?? ""}" placeholder="${settings().maxRun || "∞"}"></div>
+      </div>
+    </details>
+
     <div class="modal-actions"><button class="btn primary lg">💾 حفظ</button><button type="button" class="btn ghost" data-close>إلغاء</button></div>
   </form>`);
 
   const f = $("tForm");
+  fillIcons($("modal"));
+  const syncMode = () => { $("dblField").style.display = f.mode.value === "double" ? "" : "none"; f.maxRun.disabled = f.mode.value === "noConsec"; };
+  f.mode.onchange = syncMode; syncMode();
   f.subjectId.onchange = () => { if (!$("aSub").value) $("aSub").value = f.subjectId.value; };
 
   const drawAsg = () => {
@@ -693,6 +777,15 @@ function teacherModal(t) {
       assignments: asg.filter(a => num(a.periods) > 0).map(a => ({ subjectId: a.subjectId, sectionId: a.sectionId, periods: num(a.periods) })),
       updatedAt: serverTimestamp()
     };
+    // الأقسام: نحفظها فقط إذا اختلفت عن التلقائي
+    if (S.departments.length) {
+      const chosen = [...f.querySelectorAll("[name=dept]:checked")].map(x => x.value);
+      const auto = deptsOfTeacher({ ...t, deptIds: undefined, subjectId: data.subjectId, assignments: data.assignments }).map(d => d.id);
+      data.deptIds = (chosen.length === auto.length && chosen.every(x => auto.includes(x))) ? null : chosen;
+    }
+    const pm = {};
+    settings().periods.forEach((_, p) => { const v = f["pm" + p].value; if (v !== "") pm[p] = Math.max(0, num(v)); });
+    data.rules = { periodMax: pm, mode: f.mode.value, doubles: f.mode.value === "double" ? Math.max(1, num(f.doubles.value)) : 0, maxRun: f.maxRun.value === "" || f.mode.value === "noConsec" ? null : Math.max(1, num(f.maxRun.value)) };
     try {
       if (isNew) await addDoc(col("teachers"), { ...data, createdAt: serverTimestamp() });
       else await updateDoc(dref("teachers", t.id), data);
@@ -702,10 +795,98 @@ function teacherModal(t) {
 }
 
 // =====================================================
+//  الأقسام
+// =====================================================
+const DEPT_COLORS = ["#0f766e", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#ca8a04", "#16a34a", "#0891b2", "#be123c", "#475569"];
+const deptOf = id => S.departments.find(d => d.id === id);
+const deptsOfTeacher = t => teacherDepts(t, S.departments);
+const slotLabel = m => `${tr(settings().days[m.d] || "")} · ${tf("الحصة {0}", m.p + 1)}`;
+function slotPicker(listId, slots) {
+  const st = settings();
+  return `<div class="slot-list" id="${listId}">${slots.map((m, i) => `<span class="chip slot-chip">${esc(slotLabel(m))}<button type="button" data-rm-slot="${i}">×</button></span>`).join("") || `<span class="muted">${tr("لا يوجد")}</span>`}</div>
+    <div class="slot-add">
+      <select data-slot-d>${st.days.map((d, i) => `<option value="${i}">${esc(d)}</option>`).join("")}</select>
+      <select data-slot-p>${st.periods.map((_, i) => `<option value="${i}">${esc(tf("الحصة {0}", i + 1))}</option>`).join("")}</select>
+      <button type="button" class="btn sm" data-add-slot>+ ${tr("إضافة")}</button>
+    </div>`;
+}
+// يربط أزرار الإضافة والحذف لقائمة خانات (يوم + حصة)
+function bindSlots(root, slots, redraw) {
+  root.querySelector("[data-add-slot]").onclick = () => {
+    const d = +root.querySelector("[data-slot-d]").value, p = +root.querySelector("[data-slot-p]").value;
+    if (!slots.some(m => m.d === d && m.p === p)) slots.push({ d, p });
+    slots.sort((a, b) => a.d - b.d || a.p - b.p); redraw();
+  };
+  root.querySelectorAll("[data-rm-slot]").forEach(b => b.onclick = () => { slots.splice(+b.dataset.rmSlot, 1); redraw(); });
+}
+
+function vDepartments() {
+  const loadOf = t => load(t);
+  const none = S.teachers.filter(t => !deptsOfTeacher(t).length);
+  return `
+  <div class="page-title"><h1>الأقسام</h1><button class="btn primary" id="addDept">+ إضافة قسم</button></div>
+  <div class="notice info-n">جمّع المواد في أقسام (مثل العلوم: الفيزياء والكيمياء والأحياء). المعلم ينضم تلقائيًا لقسم مادته، ويمكن أن يكون في أكثر من قسم. حدّد لكل قسم حصص الاجتماع ليتركها التوزيع التلقائي فارغة لمعلميه.</div>
+  ${S.departments.length ? `<div class="dept-grid">${S.departments.map(d => {
+    const members = S.teachers.filter(t => deptsOfTeacher(t).some(x => x.id === d.id));
+    return `<div class="card dept-card" data-id="${d.id}" style="--c:${d.color || "#0f766e"}">
+      <div class="dept-head"><h3><span class="dot" style="background:${d.color || "#0f766e"}"></span> ${esc(d.name)}</h3>
+        <div class="row-actions"><button class="btn sm" data-act="edit">تعديل</button><button class="btn sm danger" data-act="del">حذف</button></div></div>
+      <div class="dept-stats"><div><b>${members.length}</b><span>معلم</span></div><div><b>${members.reduce((a, t) => a + loadOf(t), 0)}</b><span>حصة أسبوعيًا</span></div><div><b>${(d.meetings || []).length}</b><span>حصص اجتماع</span></div></div>
+      <div class="dept-row"><span class="muted">المواد:</span> ${(d.subjectIds || []).map(id => subject(id)).filter(Boolean).map(s => `<span class="chip"><span class="dot" style="background:${s.color}"></span>${esc(s.name)}</span>`).join("") || "—"}</div>
+      <div class="dept-row"><span class="muted">اجتماع القسم:</span> ${(d.meetings || []).map(m => `<span class="chip meet-chip">${esc(slotLabel(m))}</span>`).join("") || "—"}</div>
+      <a class="dept-link" href="#teachers" data-dept-go="${d.id}">${tf("عرض معلمي القسم ({0})", members.length)} ←</a>
+    </div>`;
+  }).join("")}</div>` : `<div class="card empty"><div class="big">🗂️</div>لم تتم إضافة أقسام بعد</div>`}
+  ${S.departments.length && none.length ? `<div class="notice warn">${esc(tf("{0} معلم ليسوا في أي قسم", none.length))}: ${none.slice(0, 8).map(t => esc(t.name)).join("، ")}${none.length > 8 ? "…" : ""}</div>` : ""}`;
+}
+BIND.departments = v => {
+  $("addDept").onclick = () => deptModal();
+  v.onclick = async e => {
+    const go = e.target.closest("[data-dept-go]");
+    if (go) { tDept = go.dataset.deptGo; return; }
+    const b = e.target.closest("[data-act]"); if (!b) return;
+    const d = deptOf(b.closest("[data-id]").dataset.id);
+    if (b.dataset.act === "edit") return deptModal(d);
+    if (!(await confirmBox(tf("حذف قسم «{0}»؟ لن يتم حذف المعلمين أو المواد.", d.name), "حذف"))) return;
+    try { await deleteDoc(dref("departments", d.id)); toast("تم الحذف", "success"); } catch (ex) { toast(errMsg(ex), "error"); }
+  };
+};
+function deptModal(d) {
+  const isNew = !d;
+  d = d || { name: "", color: DEPT_COLORS[S.departments.length % DEPT_COLORS.length], subjectIds: [], meetings: [] };
+  const meetings = (d.meetings || []).map(m => ({ ...m }));
+  openModal(`${modalHead(tr(isNew ? "إضافة قسم" : "تعديل القسم"))}
+  <form id="dForm">
+    <div class="g-subj">
+      <div class="field"><label>اسم القسم *</label><input name="name" value="${esc(d.name)}" required placeholder="${esc(tr("مثال: العلوم"))}"></div>
+      <div class="field"><label>اللون</label><input name="color" type="color" value="${d.color}" style="padding:.2em;height:46px"></div>
+    </div>
+    <label>مواد القسم</label>
+    <div class="sec-pick" style="margin-bottom:1rem">${S.subjects.map(s => `<label class="check"><input type="checkbox" name="sub" value="${s.id}" ${(d.subjectIds || []).includes(s.id) ? "checked" : ""}> <span class="dot" style="background:${s.color}"></span>${esc(s.name)}</label>`).join("") || `<span class="muted">${tr("لا توجد مواد")}</span>`}</div>
+    <label>حصص اجتماع القسم <small class="muted">(${tr("تبقى فارغة لكل معلمي القسم")})</small></label>
+    <div id="meetBox"></div>
+    <div class="modal-actions"><button class="btn primary">حفظ</button><button type="button" class="btn ghost" data-close>إلغاء</button></div>
+  </form>`);
+  const draw = () => { $("meetBox").innerHTML = slotPicker("meetList", meetings); bindSlots($("meetBox"), meetings, draw); fillIcons($("meetBox")); };
+  draw();
+  $("dForm").onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target, name = f.name.value.trim();
+    if (!name) return;
+    const data = { name, color: f.color.value, subjectIds: [...f.querySelectorAll("[name=sub]:checked")].map(x => x.value), meetings };
+    try {
+      if (isNew) await addDoc(col("departments"), { ...data, createdAt: serverTimestamp() });
+      else await updateDoc(dref("departments", d.id), data);
+      closeModal(); toast("تم الحفظ", "success");
+    } catch (ex) { toast(errMsg(ex), "error"); }
+  };
+}
+
+// =====================================================
 //  توزيع الجدول
 // =====================================================
 const TT = { saved: null, lessons: null, dirty: false, saving: false, timer: null, savedOk: true, lastJSON: "" };
-const TV = { mode: "teacher", id: null, sel: null, flash: null };
+const TV = { mode: "teacher", id: null, sel: null, flash: null, dept: null };
 let ttOrient = null;
 
 function ttDims() { return { D: settings().days.length, P: settings().periods.length }; }
@@ -717,11 +898,19 @@ function ttSync() {
   if (TT.lessons.length !== before) TV.sel = null;
   if (TV.sel != null && !TT.lessons[TV.sel]) TV.sel = null;
 }
+function ttRules() { return buildRules({ settings: settings(), departments: S.departments, teachers: S.teachers }); }
 function ttIndex() {
-  const tS = new Map(), cS = new Map();
+  const tS = new Map(), cS = new Map(), slots = new Map();
   if (!TT.lessons) ttSync();
-  TT.lessons.forEach((x, i) => { if (x.d != null) { tS.set(`${x.t}@${x.d}.${x.p}`, i); cS.set(`${x.c}@${x.d}.${x.p}`, i); } });
-  return { tS, cS };
+  const { P } = ttDims();
+  TT.lessons.forEach((x, i) => {
+    if (x.d == null) return;
+    tS.set(`${x.t}@${x.d}.${x.p}`, i); cS.set(`${x.c}@${x.d}.${x.p}`, i);
+    if (!slots.has(x.t)) slots.set(x.t, new Set());
+    slots.get(x.t).add(x.d * P + x.p);
+  });
+  const rules = ttRules();
+  return { tS, cS, slots, rules };
 }
 const DAY_EN = { "الأحد": "Sun", "الاثنين": "Mon", "الثلاثاء": "Tue", "الأربعاء": "Wed", "الخميس": "Thu", "الجمعة": "Fri", "السبت": "Sat" };
 const shortDay = d => isEn ? (DAY_EN[d] || d) : String(d).replace(/^ال/, "");
@@ -754,11 +943,22 @@ function ttStatus() {
 window.addEventListener("beforeunload", e => { if (TT.dirty) { e.preventDefault(); e.returnValue = ""; } });
 
 // هل يمكن نقل الحصة i إلى الخانة (d,p)؟
+function ruleCheck(idx, teacherId, d, p, remove = [], add = []) {
+  const { P } = ttDims();
+  const set = new Set(idx.slots.get(teacherId) || []);
+  remove.forEach(x => set.delete(x)); add.forEach(x => set.add(x));
+  return slotViolation(idx.rules, teacherId, d, p, set, tf);
+}
 function canMove(i, d, p, idx) {
   const L = TT.lessons[i];
   if (L.d === d && L.p === p) return { ok: false, same: true };
+  const { P } = ttDims();
+  const from = L.d != null ? L.d * P + L.p : -1, to = d * P + p;
   const a = idx.tS.get(`${L.t}@${d}.${p}`), b = idx.cS.get(`${L.c}@${d}.${p}`);
-  if (a == null && b == null) return { ok: true };
+  if (a == null && b == null) {
+    const v = ruleCheck(idx, L.t, d, p, from >= 0 ? [from] : []);
+    return v ? { ok: false, reason: v } : { ok: true };
+  }
   if (a != null && b != null && a !== b) {
     return { ok: false, reason: tf("المعلم والشعبة كلاهما مشغولان في هذا الوقت") };
   }
@@ -769,7 +969,16 @@ function canMove(i, d, p, idx) {
   }
   // تبديل: هل تستطيع الحصة j الذهاب إلى مكان L؟
   const ta = idx.tS.get(`${J.t}@${L.d}.${L.p}`), cb = idx.cS.get(`${J.c}@${L.d}.${L.p}`);
-  if ((ta == null || ta === i) && (cb == null || cb === i)) return { ok: true, swap: j };
+  if ((ta == null || ta === i) && (cb == null || cb === i)) {
+    if (J.t !== L.t) {
+      // تبديل بين معلمين مختلفين: نتحقق من قيود الاثنين
+      const v1 = ruleCheck(idx, L.t, d, p, [from]);
+      if (v1) return { ok: false, reason: v1 };
+      const v2 = ruleCheck(idx, J.t, L.d, L.p, [to]);
+      if (v2) return { ok: false, reason: tf("لا يمكن التبديل: {0}", `${shortName(teacherOf(J.t)?.name)} — ${v2}`) };
+    }
+    return { ok: true, swap: j };
+  }
   return {
     ok: false,
     reason: a != null ? tf("المعلم لديه حصة مع {0} في هذا الوقت", secLabel(section(J.c)))
@@ -793,7 +1002,7 @@ function vTimetable() {
   const overT = [...tLoads].filter(([, n]) => n > cap), overC = [...cLoads].filter(([, n]) => n > cap);
 
   const ents = TV.mode === "teacher"
-    ? S.teachers.filter(t => tLoads.has(t.id)).map(t => ({ id: t.id, name: t.name }))
+    ? S.teachers.filter(t => tLoads.has(t.id) && (!TV.dept || deptsOfTeacher(t).some(x => x.id === TV.dept))).map(t => ({ id: t.id, name: t.name }))
     : S.sections.filter(s => cLoads.has(s.id)).map(s => ({ id: s.id, name: secLabel(s) }));
   if (!ents.some(e => e.id === TV.id)) TV.id = ents[0]?.id || null;
   const unByEnt = new Map();
@@ -818,6 +1027,7 @@ function vTimetable() {
         <button data-m="teacher" class="${TV.mode === "teacher" ? "active" : ""}">المعلمون</button>
         <button data-m="section" class="${TV.mode === "section" ? "active" : ""}">الشعب</button>
       </div>
+      ${TV.mode === "teacher" && S.departments.length ? `<select id="ttDept" class="tt-dept"><option value="">${tr("كل الأقسام")}</option>${S.departments.map(d => `<option value="${d.id}" ${TV.dept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>` : ""}
       <div class="tt-pick">
         <button class="icon-btn" id="ttPrev" ${pos <= 0 ? "disabled" : ""}><span data-ic="${isEn ? "chevL" : "chevR"}" data-size="18"></span></button>
         <select id="ttSel">${ents.map(e => `<option value="${e.id}" ${e.id === TV.id ? "selected" : ""}>${esc(e.name)}${unByEnt.get(e.id) ? ` (${unByEnt.get(e.id)} ${tr("غير موزّعة")})` : ""}</option>`).join("")}</select>
@@ -873,6 +1083,10 @@ function ttGridHTML(mode, id, opts = {}) {
       inner = `<div class="lsn" style="--c:${sb?.color || "#64748b"}"><b>${esc(main)}</b><small>${esc(sub)}</small>${x.l ? `<i class="lk" data-ic="lock" data-size="12"></i>` : ""}</div>`;
       data += ` data-i="${i}"`;
     }
+    const sl = d * P + p;
+    const blk = idx.rules.globalBlocked.has(sl) ? tr("فارغة للجميع")
+      : (mode === "teacher" && idx.rules.teachers[id]?.meetings.has(sl) ? tf("اجتماع {0}", idx.rules.teachers[id].meetings.get(sl)) : null);
+    if (blk) { cls += i != null ? " viol" : " blk"; if (i == null) inner = `<div class="blk-l"><span data-ic="lock" data-size="12"></span>${esc(blk)}</div>`; }
     if (sel != null && i !== sel) {
       const r = canMove(sel, d, p, idx);
       cls += r.ok ? " can" : " cant";
@@ -925,6 +1139,7 @@ BIND.timetable = v => {
   ttDraw();
   $("ttMode").onclick = e => { const b = e.target.closest("button"); if (!b) return; TV.mode = b.dataset.m; TV.id = null; TV.sel = null; render(); };
   $("ttSel").onchange = e => { TV.id = e.target.value; TV.sel = null; render(); };
+  if ($("ttDept")) $("ttDept").onchange = e => { TV.dept = e.target.value || null; TV.id = null; TV.sel = null; render(); };
   const step = k => { const o = [...$("ttSel").options]; const i = o.findIndex(x => x.selected) + k; if (o[i]) { TV.id = o[i].value; TV.sel = null; render(); } };
   $("ttPrev").onclick = () => step(-1);
   $("ttNext").onclick = () => step(1);
@@ -984,13 +1199,16 @@ async function ttGenerate() {
   const placed = TT.lessons.filter(x => x.d != null && !x.l).length;
   if (placed && !(await confirmBox(tf("سيتم إعادة توزيع كل الحصص غير المثبتة. هل تريد المتابعة؟"), "توزيع", false))) return;
   const { D, P } = ttDims();
+  const rules = ttRules();
+  const issues = precheck(rules, TT.lessons);
+  if (issues.length && !(await precheckModal(issues))) return;
   openModal(`<div class="gen-box"><div class="spinner"></div><h3>جارٍ توزيع الحصص</h3><div class="progress"><i id="genBar"></i></div><p class="muted" id="genTxt"></p></div>`);
   $("modalBack").dataset.lock = "1";
   const input = TT.lessons.map(x => x.l ? x : { ...x, d: null, p: null });
   const r = await schedule({
-    D, P, lessons: input, timeBudget: 5000, maxTries: 120,
+    D, P, lessons: input, rules, timeBudget: 6000, maxTries: 120,
     onProgress: pr => {
-      const b = $("genBar"); if (b) b.style.width = Math.min(100, Math.max(pr.tries / pr.maxTries, pr.elapsed / 5000) * 100) + "%";
+      const b = $("genBar"); if (b) b.style.width = Math.min(100, Math.max(pr.tries / pr.maxTries, pr.elapsed / 6000) * 100) + "%";
       const tx = $("genTxt"); if (tx) tx.textContent = tf("محاولة {0} — غير موزّعة: {1}", pr.tries, pr.unplaced);
     }
   });
@@ -1002,11 +1220,31 @@ async function ttGenerate() {
   render();
   if (r.unplaced) toast(tf("تم التوزيع، وبقيت {0} حصة بدون مكان. راجعها في قائمة غير الموزّعة.", r.unplaced), "error");
   else toast(tf("تم توزيع {0} حصة بدون تعارض ✅", r.lessons.length), "success");
+  if (r.lockedDropped) setTimeout(() => toast(tf("{0} حصة مثبتة كانت في وقت اجتماع أو حصة فارغة فأُعيد توزيعها", r.lockedDropped)), 3500);
+}
+function precheckModal(issues) {
+  return new Promise(resolve => {
+    openModal(`${modalHead(tr("تنبيه قبل التوزيع"))}
+      <p style="margin-top:0">${tr("بعض القيود لا يمكن تحقيقها بالكامل، وستبقى حصص بدون مكان:")}</p>
+      <div class="notice warn"><ul>${issues.slice(0, 15).map(x => `<li>${esc(x.k === "teacher"
+        ? tf("المعلم {0}: لديه {1} حصة والمتاح له {2} فقط بسبب القيود", teacherOf(x.id)?.name || "", x.need, x.have)
+        : tf("الشعبة {0}: لديها {1} حصة والمتاح {2} فقط (بسبب الحصص الفارغة للجميع)", secLabel(section(x.id)), x.need, x.have))}</li>`).join("")}
+        ${issues.length > 15 ? `<li>${esc(tf("و{0} أخرى…", issues.length - 15))}</li>` : ""}</ul></div>
+      <p class="muted">${tr("يمكنك تخفيف القيود أو تقليل الحصص، أو المتابعة وتوزيع الحصص المتبقية يدويًا.")}</p>
+      <div class="modal-actions"><button class="btn primary" data-go>${tr("متابعة التوزيع")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+    $("modal").onclick = e => {
+      if (e.target.closest("[data-go]")) { $("modal").onclick = null; resolve(true); }
+      else if (e.target.closest("[data-close]")) { $("modal").onclick = null; resolve(false); }
+    };
+  });
 }
 
 // ---------- الطباعة والتحميل ----------
 function sheetFor(mode, id) {
-  return buildSheet({
+  const rules = ttRules(), { P } = ttDims(), blocked = new Map();
+  rules.globalBlocked.forEach(sl => blocked.set(sl, tr("فارغة للجميع")));
+  if (mode === "teacher") rules.teachers[id]?.meetings.forEach((name, sl) => { if (!blocked.has(sl)) blocked.set(sl, tf("اجتماع {0}", name)); });
+  return buildSheet({ blocked, P,
     kind: mode, ownerId: id,
     title: mode === "teacher" ? (teacherOf(id)?.name || "") : tf("الشعبة {0}", secLabel(section(id))),
     school: S.school.name, settings: settings(), lessons: TT.lessons || [],
