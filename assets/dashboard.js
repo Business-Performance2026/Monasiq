@@ -1,12 +1,12 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141748";
-import { setLang } from "./i18n.js?v=202611141748";
-import { schedule, reconcile } from "./scheduler.js?v=202611141748";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141748";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141748";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141748";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141748";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141748";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141756";
+import { setLang } from "./i18n.js?v=202611141756";
+import { schedule, reconcile } from "./scheduler.js?v=202611141756";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141756";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141756";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141756";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141756";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141756";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -225,13 +225,13 @@ function vSettings() {
   draftPeriods = (st.periods || []).map(p => ({ ...p }));
   return `
   <div class="page-title"><h1>إعدادات الدوام</h1></div>
-  <div class="card">
+  <div class="card" data-fold="days" data-sum="${esc(tf("{0} أيام", st.days.length))}">
     <h3>أيام الدوام</h3>
     <div style="display:flex;flex-wrap:wrap;gap:.6rem 1.4rem" id="daysBox">
       ${DAYS_ALL.map(d => `<label class="check"><input type="checkbox" value="${d}" ${st.days.includes(d) ? "checked" : ""}> ${d}</label>`).join("")}
     </div>
   </div>
-  <div class="card">
+  <div class="card" data-fold="periods" data-sum="${esc(tf("{0} حصص يوميًا", (st.periods || []).length))}">
     <h3>الحصص اليومية</h3>
     <p class="muted" style="margin-top:0">أنشئ الحصص تلقائيًا ثم عدّل أوقات أي حصة إذا احتجت.</p>
     <div class="g-periods">
@@ -244,7 +244,7 @@ function vSettings() {
     <div class="table-wrap" style="margin-top:1rem"><table class="tbl periods-tbl"><thead><tr><th>الحصة</th><th>من</th><th>إلى</th></tr></thead><tbody id="pBody"></tbody></table></div>
     <div class="modal-actions"><button class="btn primary" id="saveSettings">💾 حفظ إعدادات الدوام</button></div>
   </div>
-  <div class="card" id="rulesCard">
+  <div class="card" id="rulesCard" data-fold="rules">
     <h3>قيود التوزيع العامة</h3>
     <p class="muted" style="margin-top:0">تطبّق على جميع المعلمين عند التوزيع التلقائي، ويمكن تخصيصها لكل معلم من نافذة المعلم.</p>
     <label>حصص فارغة لجميع المعلمين <small class="muted">(${tr("لا توضع فيها أي حصة")})</small></label>
@@ -254,7 +254,7 @@ function vSettings() {
     <div class="field" style="margin-top:.8rem;max-width:280px"><label>${tr("أقصى عدد حصص متتالية لأي معلم")}</label><input type="number" id="gMaxRun" min="1" max="8" value="${st.maxRun || ""}" placeholder="∞"></div>
     <div class="modal-actions"><button class="btn primary" id="saveRules">💾 ${tr("حفظ قيود التوزيع")}</button></div>
   </div>
-  <div class="card">
+  <div class="card" data-fold="school" data-sum="${esc(s.name || "")}">
     <h3>بيانات المدرسة</h3>
     <form id="infoForm">
       <div class="field"><label>اسم المدرسة</label><input name="name" value="${esc(s.name)}" required></div>
@@ -268,7 +268,7 @@ function vSettings() {
       <button class="btn primary">💾 حفظ بيانات المدرسة</button>
     </form>
   </div>
-  <div class="card">
+  <div class="card" data-fold="import" data-sum="${esc(tr("Excel أو PDF"))}">
     <h3>استيراد البيانات</h3>
     <p class="muted" style="margin-top:0">استورد المعلمين والصفوف والشعب والمواد دفعة واحدة من ملف Excel (سطر لكل معلم ومادة وشعبة) أو من ملف PDF لجداول المعلمين (مثل جداول aSc).</p>
     <div class="field"><label>ملف Excel أو PDF</label><input type="file" id="impFile" accept=".xlsx,.xls,.csv,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></div>
@@ -278,7 +278,7 @@ function vSettings() {
       <button class="btn primary" id="impBtn"><span data-ic="upload" data-size="18"></span>استيراد</button>
     </div>
   </div>
-  <div class="card">
+  <div class="card" data-fold="pdf" data-sum="PDF">
     <h3>تحميل الجداول</h3>
     <p class="muted" style="margin-top:0">ملف PDF واحد فيه كل الجداول، 6 جداول في كل صفحة.</p>
     <div class="row-actions">
@@ -325,7 +325,31 @@ function cleanSettings() {
   if (st.maxRun) o.maxRun = st.maxRun;
   return o;
 }
+// تحويل البطاقات التي تحمل data-fold إلى أقسام قابلة للطي (العنوان يفتح ويغلق، والحالة تُحفظ)
+function foldCards(root, page) {
+  const key = "fold_" + page;
+  let open; try { open = new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { open = new Set(); }
+  root.querySelectorAll(".card[data-fold]").forEach(card => {
+    const h = card.querySelector(":scope > h3"); if (!h || card.querySelector(":scope > .fold-head")) return;
+    const id = card.dataset.fold;
+    const head = document.createElement("button");
+    head.type = "button"; head.className = "fold-head";
+    head.innerHTML = `<span class="fold-t"></span><span class="fold-sum">${card.dataset.sum ? `<span class="muted" data-no-i18n>${esc(card.dataset.sum)}</span>` : ""}<span class="ld-chev"></span></span>`;
+    head.querySelector(".fold-t").appendChild(h);
+    const body = document.createElement("div"); body.className = "fold-body";
+    while (card.firstChild) body.appendChild(card.firstChild);
+    card.append(head, body);
+    card.classList.add("fold"); card.classList.toggle("open", open.has(id));
+    head.setAttribute("aria-expanded", open.has(id));
+    head.onclick = () => {
+      const o = card.classList.toggle("open"); head.setAttribute("aria-expanded", o);
+      if (o) open.add(id); else open.delete(id);
+      try { localStorage.setItem(key, JSON.stringify([...open])); } catch {}
+    };
+  });
+}
 BIND.settings = v => {
+  foldCards(v, "settings");
   const freeAll = (settings().freeAll || []).map(m => ({ ...m }));
   const drawFree = () => { $("freeBox").innerHTML = slotPicker("freeList", freeAll); bindSlots($("freeBox"), freeAll, drawFree); };
   drawFree();

@@ -703,3 +703,17 @@ table.tt.tr { min-width: 0; }
 @media (max-width: 640px) { .ld-head { padding: 1rem; } .ld-body { padding: .8rem 1rem 1rem; } .ld-head .muted { display: none; } }
 
 .imp-hint { font-size: .85rem; margin: -.4rem 0 .8rem; }
+
+/* بطاقات قابلة للطي (الإعدادات) */
+.card.fold { padding: 0; overflow: hidden; }
+.fold-head { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: 1.05rem 1.25rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.fold-head:hover { background: #f8fafc; }
+.fold-head:focus-visible { outline: 2px solid var(--primary-2); outline-offset: -2px; border-radius: var(--radius); }
+.fold-head h3 { margin: 0; }
+.fold-sum { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.fold-sum .muted { font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
+.fold-body { display: none; padding: 0 1.25rem 1.2rem; }
+.card.fold.open .fold-body { display: block; animation: selIn .18s ease; }
+.card.fold.open .fold-head { border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
+.card.fold.open .ld-chev { transform: rotate(180deg); }
+@media (max-width: 640px) { .fold-head { padding: .95rem 1rem; } .fold-body { padding: 0 1rem 1rem; } .fold-sum .muted { max-width: 38vw; } }
