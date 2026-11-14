@@ -1,12 +1,13 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141811";
-import { setLang } from "./i18n.js?v=202611141811";
-import { schedule, reconcile } from "./scheduler.js?v=202611141811";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc } from "./whatsapp.js?v=202611141811";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141811";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141811";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141811";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141811";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141840";
+import { setLang } from "./i18n.js?v=202611141840";
+import { schedule, reconcile } from "./scheduler.js?v=202611141840";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611141840";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141840";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141840";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141840";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141840";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141840";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -19,6 +20,8 @@ let SID, pubLast = "";
 const loaded = new Set();
 const NEED = 7; // school, grades, sections, subjects, teachers, departments, timetable
 const S = { school: null, grades: [], sections: [], subjects: [], teachers: [], departments: [], accounts: [] };
+// الاشتراك: إعدادات الدفع، طلبات الدفع، والإشعارات
+const B = { cfg: { ...BILLING_DEFAULT }, pays: [], notes: [] };
 const $ = id => document.getElementById(id);
 const col = name => collection(db, "schools", SID, name);
 const dref = (name, id) => doc(db, "schools", SID, name, id);
@@ -64,6 +67,7 @@ function init(user) {
     const pubData = { name: S.school.name, region: S.school.region || "", wilayah: S.school.wilayah || "" };
     if (JSON.stringify(pubData) !== pubLast) { pubLast = JSON.stringify(pubData); setDoc(doc(db, "publicSchools", SID), pubData).catch(() => { pubLast = ""; }); }
     loaded.has("school") ? render() : mark("school");
+    updateBell();
   }, e => toast(errMsg(e), "error"));
 
   const sorters = {
@@ -73,6 +77,20 @@ function init(user) {
     teachers: (a, b) => a.name.localeCompare(b.name, "ar"),
     departments: (a, b) => a.name.localeCompare(b.name, "ar")
   };
+  const billRefresh = () => { updateBell(); if (loaded.size >= NEED && (location.hash === "#billing" || !$("view").firstElementChild)) render(); else if (loaded.size >= NEED) updateSubUI(); };
+  watchBilling(cfg => { B.cfg = cfg; billRefresh(); });
+  onSnapshot(query(collection(db, "payments"), where("schoolId", "==", SID)), snap => {
+    B.pays = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    billRefresh();
+  }, () => {});
+  onSnapshot(col("notifications"), snap => {
+    B.notes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at || 0) - (a.at || 0));
+    updateBell();
+  }, () => {});
+  document.querySelectorAll("[data-bell]").forEach(b => (b.onclick = openBell));
+  // وضع المشاهدة فقط بعد انتهاء الاشتراك: نمنع أزرار التعديل
+  document.addEventListener("click", roGuard, true);
+  document.addEventListener("submit", e => { if (isRO() && e.target.closest("#view, #modal") && !e.target.closest("#billView")) { e.preventDefault(); e.stopPropagation(); roToast(); } }, true);
   onSnapshot(query(collection(db, "teacherAccounts"), where("schoolId", "==", SID)), snap => {
     S.accounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const n = S.accounts.filter(a => a.status === "pending").length;
@@ -101,19 +119,173 @@ function init(user) {
 }
 
 // ---------- التوجيه ----------
-const VIEWS = { departments: vDepartments, overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable, accounts: vAccounts };
+const VIEWS = { billing: vBilling, departments: vDepartments, overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable, accounts: vAccounts };
 function render() {
   if (loaded.size < NEED) return;
   const v = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
   document.querySelectorAll("#nav a, #bnav a, #sheet a").forEach(a => a.classList.toggle("active", a.dataset.v === v));
-  document.querySelector("[data-more]").classList.toggle("active", v === "settings" || v === "grades" || v === "accounts" || v === "departments");
+  document.querySelector("[data-more]").classList.toggle("active", ["settings", "grades", "accounts", "departments", "billing"].includes(v));
   const view = $("view");
   view.onclick = null;
   document.body.classList.remove("has-sel");
-  view.innerHTML = VIEWS[v]();
+  document.body.classList.toggle("ro", isRO());
+  view.innerHTML = (v === "billing" ? "" : subBanner()) + VIEWS[v]();
   BIND[v]?.(view);
 }
 const BIND = {};
+
+
+// =====================================================
+//  الاشتراك
+// =====================================================
+const curSub = () => subState(S.school, B.cfg);
+const isRO = () => !!S.school && curSub().state === "expired";
+const pendingPay = () => B.pays.find(p => p.status === "pending");
+function roToast() { toast(tr("انتهى الاشتراك: يمكنك المشاهدة والتحميل فقط. جدّد من صفحة «اشتراكاتي»."), "error"); }
+const RO_ALLOW = "[data-pr],[data-act=wa],.wa-btn,.ld-head,.fold-head,.gh,#ttMode,#ttPrev,#ttNext,.tt-find,#ttPrint,#expPdfT,#expPdfS,[data-close],.x,.lang-btn,[data-bell],#billView,.ld-filters,#tFoldAll,.t-group-head,#xlsTpl,#dlCancel,.sub-banner";
+function roGuard(e) {
+  if (!isRO()) return;
+  const t = e.target;
+  if (!t.closest("#view, #modal") || t.closest(RO_ALLOW)) return;
+  if (t.closest("button, [data-act], .tt-cell, .tt-tray, input[type=checkbox], input[type=file], label.check, .sec-btn")) {
+    e.preventDefault(); e.stopPropagation(); roToast();
+  }
+}
+// شريط أعلى الصفحات حسب حالة الاشتراك
+function subBanner() {
+  const st = curSub();
+  if (st.state === "expired") return `<a class="sub-banner bad" href="#billing"><span data-ic="lock" data-size="18"></span><span>${esc(tr("انتهى الاشتراك — الوضع الآن مشاهدة وتحميل فقط."))} <b>${esc(tr("جدّد الآن"))}</b></span></a>`;
+  if (st.state === "trial" && st.daysLeft != null) return `<a class="sub-banner info" href="#billing"><span data-ic="card" data-size="18"></span><span>${esc(tf("فترة تجريبية · باقي {0} يوم.", st.daysLeft))} <b>${esc(tr("اشترك الآن"))}</b></span></a>`;
+  if (st.state === "active" && st.daysLeft <= 30) return `<a class="sub-banner warn" href="#billing"><span data-ic="card" data-size="18"></span><span>${esc(tf("ينتهي اشتراككم بعد {0} يوم.", st.daysLeft))} <b>${esc(tr("جدّد الآن"))}</b></span></a>`;
+  return "";
+}
+function updateSubUI() {
+  document.body.classList.toggle("ro", isRO());
+  const v = $("view"), old = v?.querySelector(":scope > .sub-banner"), html = location.hash === "#billing" ? "" : subBanner();
+  if (old) old.remove();
+  if (html && v) { v.insertAdjacentHTML("afterbegin", html); fillIcons(v.firstElementChild); }
+}
+// تنبيهات محسوبة (غير محفوظة): قرب انتهاء التجربة أو الاشتراك
+function subAlerts() {
+  if (!S.school) return [];
+  const st = curSub(), out = [];
+  if (st.state === "expired") out.push({ kind: "bad", title: tr("انتهى الاشتراك"), body: tr("جدّد الاشتراك لتعود لك صلاحية التعديل والتوزيع.") });
+  else if (st.state === "trial" && st.daysLeft != null && st.daysLeft <= 3) out.push({ kind: "warn", title: tr("الفترة التجريبية على وشك الانتهاء"), body: tf("باقي {0} يوم. اشترك من صفحة «اشتراكاتي».", st.daysLeft) });
+  else if (st.state === "active" && st.daysLeft <= 30) out.push({ kind: "warn", title: tr("اقترب موعد التجديد"), body: tf("ينتهي اشتراككم في {0}.", fmtDate(st.until)) });
+  return out;
+}
+function updateBell() {
+  const n = B.notes.filter(x => !x.read).length + subAlerts().length;
+  document.querySelectorAll("[data-bell-n]").forEach(b => { b.textContent = n; b.classList.toggle("hidden", !n); });
+}
+function openBell() {
+  const al = subAlerts();
+  const items = [...al.map(a => ({ ...a, alert: true })), ...B.notes.slice(0, 30)];
+  openModal(`${modalHead(tr("الإشعارات"))}
+    <div class="noti-list">${items.length ? items.map(x => `<a class="noti ${x.kind || "info"} ${x.read || x.alert ? "" : "new"}" href="#billing" data-close>
+      <b>${esc(x.title)}</b>${x.body ? `<span>${esc(x.body)}</span>` : ""}${x.at ? `<small>${esc(new Date(x.at).toLocaleString(isEn ? "en-GB" : "ar-OM", { dateStyle: "medium", timeStyle: "short" }))}</small>` : ""}</a>`).join("")
+      : `<div class="empty">${tr("لا توجد إشعارات")}</div>`}</div>`);
+  const unread = B.notes.filter(x => !x.read);
+  if (unread.length) {
+    const b = writeBatch(db);
+    unread.forEach(x => b.update(dref("notifications", x.id), { read: true }));
+    b.commit().catch(() => {});
+  }
+}
+
+function vBilling() {
+  const cfg = B.cfg, st = curSub(), lb = stateLabel(st), q = quote(S.school, cfg), pend = pendingPay();
+  const hist = B.pays.filter(p => p.status !== "pending");
+  const stBadge = { pending: ["warn", "قيد المراجعة"], approved: ["ok", "مقبول"], rejected: ["bad", "مرفوض"] };
+  return `<div id="billView">
+  <div class="page-title"><h1>اشتراكاتي</h1></div>
+  <div class="card sub-status ${lb.cls}">
+    <div class="sub-ic"><span data-ic="${st.state === "expired" ? "lock" : "card"}" data-size="26"></span></div>
+    <div>
+      <small class="muted">${tr("حالة الاشتراك")}</small>
+      <h2>${esc(lb.text)}</h2>
+      <p class="muted">${st.state === "expired" ? esc(tr("يمكنك مشاهدة الجداول وتحميلها، والمعلمون يرون جداولهم، لكن التعديل والتوزيع متوقفان حتى التجديد."))
+        : st.state === "trial" ? esc(tf("الاشتراك السنوي {0}، وكل الاشتراكات تنتهي في نفس التاريخ: {1}.", money(cfg.price, cfg), fmtDate(nextExpiryOf(cfg))))
+        : esc(tf("التجديد السنوي {0}.", money(cfg.price, cfg)))}</p>
+    </div>
+  </div>
+  ${pend ? `<div class="card pay-pending">
+      <h3>${tr("طلبك قيد المراجعة")}</h3>
+      <p class="muted">${esc(tf("أُرسل في {0} بمبلغ {1}. سيصلك إشعار هنا بمجرد التفعيل.", new Date(pend.createdAt).toLocaleDateString(isEn ? "en-GB" : "ar-OM"), money(pend.amount, cfg)))}</p>
+      ${pend.receipt ? `<img class="rcpt-thumb" src="${pend.receipt}" alt="">` : ""}
+      <div class="row-actions">
+        ${cfg.adminPhone ? `<button class="btn wa-notify" id="waAdmin">${WA_ICON}<span>${tr("إبلاغ الإدارة عبر واتساب")}</span></button>` : ""}
+        <button class="btn ghost" id="payCancel">${tr("إلغاء الطلب")}</button>
+      </div>
+    </div>` : st.state === "active" && st.daysLeft > 60 ? `<div class="card"><h3>${tr("لا يلزم أي إجراء الآن")}</h3>
+      <p class="muted" style="margin:0">${esc(tf("يُفتح التجديد قبل انتهاء الاشتراك بشهرين ({0}).", fmtDate(st.until - 60 * DAY)))}</p></div>` : `<div class="card pay-card">
+      <h3>${tr(st.state === "active" ? "تجديد الاشتراك" : "الاشتراك")}</h3>
+      <div class="pay-amount"><b>${esc(money(q.amount, cfg))}</b><span>${esc(tf("يمتد الاشتراك حتى {0}", fmtDate(q.until)))}${!q.renewal && q.months < 12 ? ` · ${esc(tf("حسب {0} أشهر متبقية", q.months))}` : ""}</span></div>
+      <ol class="pay-steps">
+        <li>${esc(tf("حوّل مبلغ {0} عبر التحويل البنكي برقم الهاتف:", money(q.amount, cfg)))}
+          ${cfg.bankPhone ? `<div class="bank-box"><div><small>${tr("رقم الهاتف")}</small><b dir="ltr">${esc(cfg.bankPhone)}</b></div><button class="btn sm" id="copyPhone">${tr("نسخ")}</button></div>
+          ${cfg.bankName ? `<div class="bank-box"><div><small>${tr("اسم صاحب الحساب")}</small><b>${esc(cfg.bankName)}</b></div></div>` : ""}
+          ${cfg.bankNote ? `<p class="muted" style="margin:.4rem 0 0">${esc(cfg.bankNote)}</p>` : ""}` : `<div class="notice warn">${tr("لم تُضف بيانات التحويل بعد. تواصل مع إدارة المنصة.")}</div>`}
+        </li>
+        <li>${tr("ارفع صورة وصل التحويل (صورة أو PDF):")}
+          <input type="file" id="rcptFile" accept="image/*,application/pdf">
+          <div id="rcptPrev"></div>
+          <textarea id="payNote" rows="2" placeholder="${esc(tr("ملاحظة (اختياري)"))}"></textarea>
+        </li>
+      </ol>
+      <button class="btn primary block" id="paySend"><span data-ic="upload" data-size="18"></span>${tr("إرسال الوصل")}</button>
+    </div>`}
+  <div class="card">
+    <h3>${tr("سجل الدفعات")}</h3>
+    ${hist.length ? `<div class="pay-hist">${hist.map(p => `<div class="ph-row">
+      <div><b>${esc(money(p.amount, cfg))}</b><small class="muted">${esc(new Date(p.createdAt).toLocaleDateString(isEn ? "en-GB" : "ar-OM"))}${p.status === "approved" && p.until ? ` · ${esc(tf("حتى {0}", fmtDate(p.until)))}` : ""}</small>
+      ${p.status === "rejected" && p.reason ? `<small class="ph-reason">${esc(tf("سبب الرفض: {0}", p.reason))}</small>` : ""}</div>
+      <span class="badge ${stBadge[p.status]?.[0] || "info"}">${tr(stBadge[p.status]?.[1] || p.status)}</span></div>`).join("")}</div>` : `<p class="muted">${tr("لا توجد دفعات سابقة")}</p>`}
+  </div></div>`;
+}
+const nextExpiryOf = cfg => quote({}, cfg).until;
+BIND.billing = v => {
+  fillIcons(v);
+  const cfg = B.cfg, pend = pendingPay();
+  const waAdmin = p => {
+    const n = waNumber(cfg.adminPhone); if (!n) return;
+    const msg = tf("السلام عليكم، مدرسة {0} رفعت وصل تحويل اشتراك منصة مُنسِّق بمبلغ {1}، يرجى المراجعة والتفعيل.", S.school.name, money(p.amount, cfg));
+    window.open(`https://wa.me/${n}?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+  if (pend) {
+    if ($("waAdmin")) $("waAdmin").onclick = () => waAdmin(pend);
+    $("payCancel").onclick = async () => {
+      if (!(await confirmBox(tr("إلغاء طلب الاشتراك المرسل؟"), tr("إلغاء الطلب")))) return;
+      try { await deleteDoc(doc(db, "payments", pend.id)); toast(tr("تم إلغاء الطلب"), "success"); } catch (e) { toast(errMsg(e), "error"); }
+    };
+    return;
+  }
+  if (!$("paySend")) return;
+  if ($("copyPhone")) $("copyPhone").onclick = async () => { try { await navigator.clipboard.writeText(cfg.bankPhone); toast(tr("تم نسخ الرقم"), "success"); } catch { toast(cfg.bankPhone); } };
+  let rcpt = null;
+  $("rcptFile").onchange = async e => {
+    const f = e.target.files[0]; rcpt = null; $("rcptPrev").innerHTML = "";
+    if (!f) return;
+    $("rcptPrev").innerHTML = `<div class="muted">${tr("جارٍ تجهيز الصورة")}…</div>`;
+    try { rcpt = await receiptDataUrl(f); $("rcptPrev").innerHTML = `<img class="rcpt-thumb" src="${rcpt}" alt="">`; }
+    catch { $("rcptPrev").innerHTML = ""; e.target.value = ""; toast(tr("تعذّر قراءة الملف. أرسل صورة أوضح أو أصغر."), "error"); }
+  };
+  $("paySend").onclick = async () => {
+    if (!rcpt) return toast(tr("ارفع صورة وصل التحويل أولًا"), "error");
+    const q = quote(S.school, cfg), btn = $("paySend");
+    btn.disabled = true;
+    const p = { schoolId: SID, schoolName: S.school.name, email: S.school.email || "", amount: q.amount, until: q.until, months: q.months, renewal: q.renewal,
+      receipt: rcpt, note: $("payNote").value.trim().slice(0, 500), status: "pending", createdAt: Date.now() };
+    try {
+      await addDoc(collection(db, "payments"), p);
+      openModal(`${modalHead(tr("تم إرسال الوصل ✅"))}
+        <p>${esc(tr("سيتم مراجعة الوصل وتفعيل الاشتراك، وسيصلك إشعار هنا عند التفعيل."))}</p>
+        ${cfg.adminPhone ? `<p class="muted">${tr("لتسريع المراجعة أبلغ الإدارة عبر واتساب:")}</p>` : ""}
+        <div class="modal-actions">${cfg.adminPhone ? `<button class="btn wa-notify" id="waAdmin2">${WA_ICON}<span>${tr("إبلاغ الإدارة عبر واتساب")}</span></button>` : ""}<button class="btn ghost" data-close>${tr("إغلاق")}</button></div>`);
+      if ($("waAdmin2")) $("waAdmin2").onclick = () => { waAdmin(p); closeModal(); };
+    } catch (e) { btn.disabled = false; toast(errMsg(e), "error"); }
+  };
+};
 
 // ---------- نافذة منبثقة ----------
 function openModal(html) { $("modal").innerHTML = html; $("modalBack").classList.add("show"); }

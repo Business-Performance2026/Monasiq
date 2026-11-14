@@ -13,6 +13,14 @@ service cloud.firestore {
     function isActiveSchool(schoolId) {
       return signedIn() && request.auth.uid == schoolId && schoolDoc(schoolId).status == 'active';
     }
+    // الاشتراك: مدرسة مشتركة أو في فترتها التجريبية (أو مدرسة قديمة لم تبدأ تجربتها بعد)
+    function subOk(schoolId) {
+      let s = schoolDoc(schoolId);
+      return !('trialEnds' in s) && !('paidUntil' in s)
+        || s.get('trialEnds', 0) > request.time.toMillis()
+        || s.get('paidUntil', 0) > request.time.toMillis();
+    }
+    function canEdit(schoolId) { return isActiveSchool(schoolId) && subOk(schoolId); }
     // معلم مفعّل تابع لهذه المدرسة (والمدرسة نفسها مفعّلة)
     function isActiveTeacherOf(schoolId) {
       let path = /databases/$(database)/documents/teacherAccounts/$(request.auth.uid);
@@ -43,19 +51,50 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.status == 'pending';
 
+      // المدرسة تعدّل بياناتها فقط (لا تستطيع تعديل الحالة أو الاشتراك)
       allow update: if isAdmin() || (
-        isActiveSchool(schoolId) &&
+        canEdit(schoolId) &&
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['name', 'region', 'wilayah', 'stages', 'principal', 'phone', 'settings', 'updatedAt'])
       );
 
       allow delete: if isAdmin();
 
-      // بيانات المدرسة: المدرسة تقرأ وتكتب، والمعلم المفعّل يقرأ فقط
+      // بيانات المدرسة: المدرسة تقرأ وتكتب (إذا كان اشتراكها ساريًا)، والمعلم المفعّل يقرأ فقط
       match /{sub=**} {
         allow read: if isAdmin() || isActiveSchool(schoolId) || isActiveTeacherOf(schoolId);
-        allow write: if isAdmin() || isActiveSchool(schoolId);
+        allow write: if isAdmin() || canEdit(schoolId);
       }
+      // رابط واتساب للمعلم يعمل حتى بعد انتهاء الاشتراك
+      match /teachers/{tid} {
+        allow update: if isActiveSchool(schoolId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['shareId']);
+      }
+      // إشعارات المدرسة: الإدارة تنشئها، والمدرسة تقرؤها وتعلّمها كمقروءة
+      match /notifications/{nid} {
+        allow read: if isAdmin() || isActiveSchool(schoolId);
+        allow create, delete: if isAdmin();
+        allow update: if isAdmin() || (isActiveSchool(schoolId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']));
+      }
+    }
+
+    // إعدادات الاشتراك (السعر، رقم التحويل...) — يقرؤها أي مستخدم مسجّل، ويعدّلها المدير
+    match /config/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // طلبات الاشتراك (وصل التحويل): المدرسة ترسل وتلغي طلبها المعلّق، والمدير يراجع
+    match /payments/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.schoolId == request.auth.uid);
+      allow create: if isActiveSchool(request.resource.data.schoolId)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.receipt is string
+        && request.resource.data.receipt.size() < 900000
+        && !request.resource.data.keys().hasAny(['decidedAt', 'reason']);
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && resource.data.schoolId == request.auth.uid && resource.data.status == 'pending');
     }
 
     // روابط جداول المعلمين المرسلة عبر واتساب: تُقرأ بالرابط فقط (بدون قائمة)

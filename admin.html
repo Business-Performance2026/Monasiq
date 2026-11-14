@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>إدارة المنصة | {app}</title>
   <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
-  <link rel="stylesheet" href="assets/style.css?v=202611141811">
-  <link rel="manifest" href="manifest.webmanifest?v=202611141811">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611141811">
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611141811">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611141811">
+  <link rel="stylesheet" href="assets/style.css?v=202611141840">
+  <link rel="manifest" href="manifest.webmanifest?v=202611141840">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611141840">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611141840">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611141840">
   <meta name="theme-color" content="#012950">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,10 +21,13 @@
 
 <div class="app hidden" id="appRoot">
   <aside class="side" id="side">
-    <div class="logo"><img class="logo-mark" src="assets/img/icon-96.png?v=202611141811" alt=""><span data-app-name></span></div>
+    <div class="side-top"><div class="logo"><img class="logo-mark" src="assets/img/icon-96.png?v=202611141840" alt=""><span data-app-name></span></div>
+      <button class="bell" data-bell title="طلبات الاشتراك" aria-label="طلبات الاشتراك"><span data-ic="bell" data-size="20"></span><i class="nbadge hidden" data-bell-n></i></button></div>
     <div class="school-name">لوحة إدارة المنصة</div>
     <nav>
-      <a href="#" class="active"><span data-ic="schools"></span>المدارس</a>
+      <a href="#schools" data-view="schools"><span data-ic="schools"></span>المدارس</a>
+      <a href="#payments" data-view="payments"><span data-ic="card"></span>طلبات الاشتراك <span class="nbadge hidden" data-pay-n></span></a>
+      <a href="#billing" data-view="billing"><span data-ic="settings"></span>إعدادات الاشتراك</a>
       <a href="index.html" target="_blank"><span data-ic="web"></span>الصفحة الرئيسية</a>
     </nav>
     <button class="lang-btn" data-lang-toggle></button>
@@ -34,160 +37,21 @@
   <div class="content">
     <header class="topbar">
       <div class="tb-title">
-        <img class="logo-mark sm" src="assets/img/icon-64.png?v=202611141811" alt="">
+        <img class="logo-mark sm" src="assets/img/icon-64.png?v=202611141840" alt="">
         <div><b data-app-name></b><small>لوحة إدارة المنصة</small></div>
       </div>
-      <div class="tb-actions"><button class="lang-btn" data-lang-toggle></button><button class="icon-btn" data-logout title="تسجيل الخروج"><span data-ic="logout"></span></button></div>
+      <div class="tb-actions"><button class="bell" data-bell title="طلبات الاشتراك"><span data-ic="bell" data-size="20"></span><i class="nbadge hidden" data-bell-n></i></button><button class="lang-btn" data-lang-toggle></button><button class="icon-btn" data-logout title="تسجيل الخروج"><span data-ic="logout"></span></button></div>
     </header>
-    <main class="main">
-      <div class="page-title"><h1>إدارة المدارس</h1></div>
-
-      <div class="stats">
-        <div class="stat"><div class="n" id="sTotal">0</div><div class="l">إجمالي المدارس</div></div>
-        <div class="stat"><div class="n" id="sPending" style="color:var(--warn)">0</div><div class="l">بانتظار الموافقة</div></div>
-        <div class="stat"><div class="n" id="sActive" style="color:var(--ok)">0</div><div class="l">مدارس مفعّلة</div></div>
-        <div class="stat"><div class="n" id="sStopped" style="color:var(--bad)">0</div><div class="l">موقوفة / مرفوضة</div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <div class="tabs" id="filters">
-            <button data-f="pending" class="active">بانتظار الموافقة</button>
-            <button data-f="active">المفعّلة</button>
-            <button data-f="suspended">الموقوفة</button>
-            <button data-f="rejected">المرفوضة</button>
-            <button data-f="all">الكل</button>
-          </div>
-          <input id="search" placeholder="بحث باسم المدرسة أو البريد..." style="max-width:280px">
-        </div>
-        <div id="list"></div>
-      </div>
-    </main>
+    <div class="adm-mtabs tabs">
+      <a href="#schools" data-view="schools">المدارس</a>
+      <a href="#payments" data-view="payments">الطلبات <span class="nbadge hidden" data-pay-n></span></a>
+      <a href="#billing" data-view="billing">الإعدادات</a>
+    </div>
+    <main class="main" id="main"></main>
   </div>
 </div>
+<div class="modal-back" id="modalBack"><div class="modal" id="modal"></div></div>
 
-<script type="module">
-  import { auth, db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, lang, fillIcons, sendReset } from "./assets/app.js?v=202611141811";
-  import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, getDocs, query, where, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  applyBranding();
-
-  const user = await waitUser();
-  const role = await getRole(user).catch(() => ({ role: "none" }));
-  if (role.role !== "admin") location.replace("login.html");
-  else start();
-
-  function start() {
-    document.getElementById("loading").classList.add("hidden");
-    document.getElementById("appRoot").classList.remove("hidden");
-    fillIcons();
-    document.querySelectorAll("[data-logout]").forEach(b => (b.onclick = logout));
-
-    let schools = [], filter = "pending", q = "", pub = null, syncWarned = false;
-    onSnapshot(collection(db, "schools"), snap => {
-      schools = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      render(); syncPublic();
-    }, e => toast(errMsg(e), "error"));
-    onSnapshot(collection(db, "publicSchools"), snap => {
-      pub = new Map(snap.docs.map(d => [d.id, d.data()])); syncPublic();
-    }, () => { pub = new Map(); syncPublic(); });
-    // قائمة المدارس المفعّلة التي يختار منها المعلم عند التسجيل
-    async function syncPublic() {
-      if (!pub || !schools.length) return;
-      for (const s of schools) {
-        const p = pub.get(s.id);
-        try {
-          if (s.status === "active") {
-            if (!p || p.name !== s.name || (p.region || "") !== (s.region || "") || (p.wilayah || "") !== (s.wilayah || ""))
-              await setDoc(doc(db, "publicSchools", s.id), { name: s.name, region: s.region || "", wilayah: s.wilayah || "" });
-          } else if (p) await deleteDoc(doc(db, "publicSchools", s.id));
-        } catch (e) { if (!syncWarned) { syncWarned = true; toast(t("تعذّر تحديث قائمة المدارس للمعلمين. تأكد من نشر قواعد Firestore الجديدة."), "error"); } }
-      }
-    }
-
-    document.getElementById("filters").onclick = e => {
-      const b = e.target.closest("button"); if (!b) return;
-      filter = b.dataset.f;
-      document.querySelectorAll("#filters button").forEach(x => x.classList.toggle("active", x === b));
-      render();
-    };
-    document.getElementById("search").oninput = e => { q = e.target.value.trim(); render(); };
-
-    function render() {
-      const c = s => schools.filter(x => x.status === s).length;
-      const $ = id => document.getElementById(id);
-      $("sTotal").textContent = schools.length;
-      $("sPending").textContent = c("pending");
-      $("sActive").textContent = c("active");
-      $("sStopped").textContent = c("suspended") + c("rejected");
-
-      let rows = filter === "all" ? schools : schools.filter(s => s.status === filter);
-      if (q) rows = rows.filter(s => (s.name + " " + s.email + " " + (s.region || "")).includes(q));
-      const list = document.getElementById("list");
-      if (!rows.length) { list.innerHTML = `<div class="empty"><div class="big">📭</div>لا توجد مدارس في هذا القسم</div>`; return; }
-
-      list.innerHTML = rows.map(s => {
-        const st = STATUS[s.status] || { label: s.status, cls: "info" };
-        const date = s.createdAt?.toDate ? s.createdAt.toDate().toLocaleDateString(lang === "en" ? "en-GB" : "ar-OM") : "";
-        const acts = [];
-        if (s.status === "pending") acts.push(`<button class="btn sm success" data-a="active">✔ موافقة</button><button class="btn sm warn" data-a="rejected">رفض</button>`);
-        if (s.status === "active") acts.push(`<button class="btn sm warn" data-a="suspended">إيقاف</button>`);
-        if (s.status === "suspended" || s.status === "rejected") acts.push(`<button class="btn sm success" data-a="active">تفعيل</button>`);
-        if (s.email) acts.push(`<button class="btn sm" data-a="reset">إعادة تعيين كلمة المرور</button>`);
-        acts.push(`<button class="btn sm danger" data-a="delete">حذف</button>`);
-        return `<div class="card school-card" data-id="${s.id}">
-          <div>
-            <h3 style="margin:0 0 .3rem">${esc(s.name)} <span class="badge ${st.cls}">${st.label}</span></h3>
-            <div class="meta">
-              <span>📍 ${esc(s.region || "")}${s.wilayah ? " - " + esc(s.wilayah) : ""}</span>
-              ${s.stages ? `<span>🎓 ${esc(s.stages)}</span>` : ""}
-              <span>👤 ${esc(s.principal || "")}</span>
-              <span>📞 <a href="tel:${esc(s.phone)}" dir="ltr">${esc(s.phone || "")}</a></span>
-              <span>✉️ <a href="mailto:${esc(s.email)}">${esc(s.email || "")}</a></span>
-              ${date ? `<span>🗓️ ${date}</span>` : ""}
-            </div>
-          </div>
-          <div class="row-actions">${acts.join("")}</div>
-        </div>`;
-      }).join("");
-    }
-
-    document.getElementById("list").onclick = async e => {
-      const b = e.target.closest("button[data-a]"); if (!b) return;
-      const id = b.closest("[data-id]").dataset.id;
-      const s = schools.find(x => x.id === id);
-      const a = b.dataset.a;
-      try {
-        if (a === "reset") {
-          if (!(await confirmBox(t("إرسال رابط إعادة تعيين كلمة المرور إلى {0}؟", s.email), "إرسال", false))) return;
-          await sendReset(s.email);
-          toast(t("تم إرسال رابط إعادة التعيين إلى {0}", s.email), "success");
-          return;
-        }
-        if (a === "delete") {
-          if (!(await confirmBox(t("حذف مدرسة «{0}» وكل بياناتها نهائيًا؟", s.name), "حذف نهائي"))) return;
-          for (const sub of ["grades", "sections", "subjects", "teachers", "timetable"]) {
-            const docs = (await getDocs(collection(db, "schools", id, sub))).docs;
-            for (let i = 0; i < docs.length; i += 400) {
-              const batch = writeBatch(db);
-              docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
-              await batch.commit();
-            }
-          }
-          const accs = (await getDocs(query(collection(db, "teacherAccounts"), where("schoolId", "==", id)))).docs;
-          for (const d of accs) await deleteDoc(d.ref);
-          await deleteDoc(doc(db, "publicSchools", id)).catch(() => {});
-          await deleteDoc(doc(db, "schools", id));
-          toast("تم حذف المدرسة", "success");
-          return;
-        }
-        const labels = { active: "تفعيل", suspended: "إيقاف", rejected: "رفض" };
-        if (a !== "active" && !(await confirmBox(t({ active: "تفعيل مدرسة «{0}»؟", suspended: "إيقاف مدرسة «{0}»؟", rejected: "رفض مدرسة «{0}»؟" }[a], s.name), labels[a]))) return;
-        await updateDoc(doc(db, "schools", id), { status: a, statusAt: serverTimestamp() });
-        toast(a === "active" ? "تم تفعيل المدرسة ✅" : "تم التحديث", "success");
-      } catch (ex) { toast(errMsg(ex), "error"); }
-    };
-  }
-</script>
+<script type="module" src="assets/admin.js?v=202611141840"></script>
 </body>
 </html>

@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>لوحة المدرسة | {app}</title>
   <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
-  <link rel="stylesheet" href="assets/style.css?v=202611141811">
-  <link rel="manifest" href="manifest.webmanifest?v=202611141811">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611141811">
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611141811">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611141811">
+  <link rel="stylesheet" href="assets/style.css?v=202611141840">
+  <link rel="manifest" href="manifest.webmanifest?v=202611141840">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611141840">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611141840">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611141840">
   <meta name="theme-color" content="#012950">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,7 +21,8 @@
 
 <div class="app hidden" id="appRoot">
   <aside class="side" id="side">
-    <div class="logo"><img class="logo-mark" src="assets/img/icon-96.png?v=202611141811" alt=""><span data-app-name></span></div>
+    <div class="side-top"><div class="logo"><img class="logo-mark" src="assets/img/icon-96.png?v=202611141840" alt=""><span data-app-name></span></div>
+      <button class="bell" data-bell title="الإشعارات" aria-label="الإشعارات"><span data-ic="bell" data-size="20"></span><i class="nbadge hidden" data-bell-n></i></button></div>
     <div class="school-name" data-school-name></div>
     <nav id="nav">
       <a href="#overview" data-v="overview"><span data-ic="home"></span>الرئيسية</a>
@@ -32,6 +33,7 @@
       <a href="#grades" data-v="grades"><span data-ic="grades"></span>الصفوف والشعب</a>
       <a href="#accounts" data-v="accounts"><span data-ic="userCheck"></span>حسابات المعلمين <span class="nbadge hidden" data-acc-badge></span></a>
       <a href="#settings" data-v="settings"><span data-ic="settings"></span>إعدادات الدوام</a>
+      <a href="#billing" data-v="billing"><span data-ic="card"></span>اشتراكاتي</a>
     </nav>
     <button class="lang-btn" data-lang-toggle></button>
     <button class="btn logout" data-logout><span data-ic="logout" data-size="18"></span>تسجيل الخروج</button>
@@ -40,10 +42,11 @@
   <div class="content">
     <header class="topbar">
       <div class="tb-title">
-        <img class="logo-mark sm" src="assets/img/icon-64.png?v=202611141811" alt="">
+        <img class="logo-mark sm" src="assets/img/icon-64.png?v=202611141840" alt="">
         <div><b data-app-name></b><small data-school-name></small></div>
       </div>
-      <button class="lang-btn" data-lang-toggle></button>
+      <div class="tb-actions"><button class="bell" data-bell title="الإشعارات" aria-label="الإشعارات"><span data-ic="bell" data-size="20"></span><i class="nbadge hidden" data-bell-n></i></button>
+      <button class="lang-btn" data-lang-toggle></button></div>
     </header>
     <main class="main" id="view"></main>
   </div>
@@ -63,6 +66,7 @@
       <a href="#accounts" data-v="accounts"><span data-ic="userCheck"></span>حسابات المعلمين <span class="nbadge hidden" data-acc-badge></span></a>
       <a href="#grades" data-v="grades"><span data-ic="grades"></span>الصفوف والشعب</a>
       <a href="#settings" data-v="settings"><span data-ic="settings"></span>إعدادات الدوام</a>
+      <a href="#billing" data-v="billing"><span data-ic="card"></span>اشتراكاتي</a>
       <button data-lang-toggle-row><span data-ic="globe"></span><span data-lang-label></span></button>
       <button class="danger-row" data-logout><span data-ic="logout"></span>تسجيل الخروج</button>
     </div>
@@ -71,6 +75,6 @@
 
 <div class="modal-back" id="modalBack"><div class="modal" id="modal"></div></div>
 
-<script type="module" src="assets/dashboard.js?v=202611141811"></script>
+<script type="module" src="assets/dashboard.js?v=202611141840"></script>
 </body>
 </html>
