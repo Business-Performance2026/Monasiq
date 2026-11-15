@@ -1,6 +1,6 @@
 // الاشتراكات: حساب الحالة والمبلغ، وتجهيز صورة الوصل
 // كل المدارس تنتهي اشتراكاتها في تاريخ واحد كل سنة (افتراضيًا 31 أغسطس)
-import { app, db, t as tf, tr, isEn } from "./app.js?v=202611150714";
+import { app, db, t as tf, tr, isEn } from "./app.js?v=202611150718";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export const DAY = 86400000;

@@ -1,16 +1,16 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611150714";
-import { setLang } from "./i18n.js?v=202611150714";
-import { schedule, reconcile } from "./scheduler.js?v=202611150714";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611150714";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611150714";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611150714";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611150714";
-import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611150714";
-import { parseAscXml } from "./xml-import.js?v=202611150714";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611150714";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611150714";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611150714";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611150718";
+import { setLang } from "./i18n.js?v=202611150718";
+import { schedule, reconcile } from "./scheduler.js?v=202611150718";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611150718";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611150718";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611150718";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611150718";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611150718";
+import { parseAscXml } from "./xml-import.js?v=202611150718";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611150718";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611150718";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611150718";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -1020,7 +1020,9 @@ BIND.settings = v => {
     if (!f) return toast("اختر ملف البيانات أولًا", "error");
     const replace = $("impReplace").checked;
     let data, warnings = [], extra = "";
-    if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+    // نوع الملف من محتواه (بعض الجوالات تحفظ الملف بدون امتداد)
+    const kind = await fileKind(f);
+    if (kind === "pdf") {
       openModal(`<div class="gen-box"><div class="spinner"></div><h3>${tr("جارٍ قراءة ملف PDF")}</h3><div class="progress"><i id="pdfBar"></i></div></div>`);
       $("modalBack").dataset.lock = "1";
       try {
@@ -1032,14 +1034,14 @@ BIND.settings = v => {
       } catch (ex) { console.error(ex); }
       delete $("modalBack").dataset.lock; closeModal();
       if (!data || !data.timetable?.length) return toast("لم يتم العثور على جداول يمكن قراءتها في هذا الملف. تأكد أن الملف PDF نصي (غير ممسوح ضوئيًا) ويحتوي جداول المعلمين.", "error");
-    } else if (/\.(xlsx|xls|csv)$/i.test(f.name)) {
+    } else if (kind === "excel") {
       let r;
       try { toast(tr("جارٍ قراءة الملف")); r = await parseExcel(f); } catch (ex) { console.error(ex); return toast("تعذّر قراءة ملف Excel", "error"); }
       if (r.error === "header") return toast("لم نجد أعمدة «المعلم» و«المادة» و«الشعبة» في الملف. حمّل النموذج واستخدمه.", "error");
       if (r.error) return toast("لا توجد بيانات صالحة في الملف", "error");
       data = r.data; warnings = r.warnings;
       extra = tf("تمت قراءة {0} سطر من ورقة «{1}». بعد الاستيراد اضغط «توزيع تلقائي» في صفحة الجدول.", r.stats.rows, r.stats.sheet);
-    } else if (/\.xml$/i.test(f.name)) {
+    } else if (kind === "xml") {
       let r;
       try { toast(tr("جارٍ قراءة الملف")); r = await parseAscXml(f, settings()); } catch (ex) { console.error(ex); return toast(tr("تعذّر قراءة ملف XML"), "error"); }
       if (r.error) return toast(tr(r.error === "empty" ? "لا توجد حصص في الملف" : "هذا ليس ملف XML من برنامج aSc Timetables"), "error");
@@ -1431,6 +1433,19 @@ BIND.subjects = v => {
 // =====================================================
 let tQuery = "";
 let IMP_FILE = null;
+// تحديد نوع ملف الاستيراد من أول بايتات الملف، ثم من الامتداد
+async function fileKind(f) {
+  const b = new Uint8Array(await f.slice(0, 512).arrayBuffer());
+  const txt = new TextDecoder("latin1").decode(b).replace(/^\uFEFF|^\xEF\xBB\xBF/, "").trimStart();
+  if (txt.startsWith("%PDF")) return "pdf";
+  if (b[0] === 0x50 && b[1] === 0x4B) return "excel"; // xlsx (zip)
+  if (b[0] === 0xD0 && b[1] === 0xCF) return "excel"; // xls القديم
+  if (/^<\?xml/i.test(txt) || /^<timetable/i.test(txt)) return "xml";
+  if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") return "pdf";
+  if (/\.xml$/i.test(f.name) || /xml/i.test(f.type)) return "xml";
+  if (/\.(xlsx|xls|csv)$/i.test(f.name) || /sheet|excel|csv/i.test(f.type)) return "excel";
+  return "";
+}
 function showImpFile() {
   const box = $("impPicked"); if (!box) return;
   box.innerHTML = IMP_FILE ? `📎 <b data-no-i18n>${esc(IMP_FILE.name)}</b> <span class="muted">(${Math.max(1, Math.round(IMP_FILE.size / 1024))} KB)</span> <button type="button" class="btn sm ghost" id="impClear">×</button>` : "";
