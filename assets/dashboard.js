@@ -1,17 +1,17 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611151440";
-import { setLang } from "./i18n.js?v=202611151440";
-import { schedule, reconcile } from "./scheduler.js?v=202611151440";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611151440";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611151440";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611151440";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611151440";
-import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611151440";
-import { parseAscXml } from "./xml-import.js?v=202611151440";
-import { gzipText, gunzipText, buildNoorXml } from "./noor-export.js?v=202611151440";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611151440";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611151440";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611151440";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611151503";
+import { setLang } from "./i18n.js?v=202611151503";
+import { schedule, reconcile } from "./scheduler.js?v=202611151503";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611151503";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611151503";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611151503";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611151503";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611151503";
+import { parseAscXml } from "./xml-import.js?v=202611151503";
+import { gzipText, gunzipText, buildNoorXml } from "./noor-export.js?v=202611151503";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611151503";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611151503";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611151503";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where, getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -959,8 +959,8 @@ function vSettings() {
       <button class="btn primary" id="impBtn"><span data-ic="upload" data-size="18"></span>استيراد</button>
     </div>
     <div class="wipe-box">
-      <div><b>${tr("حذف البيانات المستوردة")}</b><p class="muted">${tr("يحذف كل المعلمين والشعب والصفوف والمواد والجداول وملف نور، لتبدأ من جديد أو تستورد ملفًا آخر.")}</p></div>
-      <button class="btn danger" id="wipeBtn"><span data-ic="trash" data-size="18"></span>${tr("حذف كل البيانات")}</button>
+      <div><b>${tr("حذف البيانات المستوردة")}</b><p class="muted">${tr("احذف الجداول فقط، أو احذف كل شيء لتبدأ من جديد أو تستورد ملفًا آخر.")}</p></div>
+      <button class="btn danger" id="wipeBtn"><span data-ic="trash" data-size="18"></span>${tr("حذف البيانات")}</button>
     </div>
   </div>
   <div class="card" data-fold="pdf" data-sum="PDF">
@@ -1156,27 +1156,31 @@ function wipeModal() {
   const n = { t: S.teachers.length, c: S.sections.length, s: S.subjects.length, l: (TT.lessons || []).filter(x => x.d != null).length };
   if (!n.t && !n.c && !n.s) return toast(tr("لا توجد بيانات لحذفها"));
   const word = tr("حذف");
-  openModal(`${modalHead(tr("حذف كل البيانات المستوردة"))}
+  openModal(`${modalHead(tr("حذف البيانات المستوردة"))}
     <div class="imp-stats"><div><b>${n.t}</b><span>${tr("معلم")}</span></div><div><b>${n.c}</b><span>${tr("شعبة")}</span></div><div><b>${n.s}</b><span>${tr("مادة")}</span></div><div><b>${n.l}</b><span>${tr("حصة")}</span></div></div>
-    <div class="notice bad">${tr("سيتم حذف: المعلمين، الأقسام، الصفوف، الشعب، المواد، الجداول، ملف نور المحفوظ، وسجل الغياب والاحتياط. لا يمكن التراجع عن هذا.")}</div>
-    <p class="muted" style="font-size:.85rem">${tr("تبقى: بيانات المدرسة، أوقات الدوام والحصص، الاشتراك، وحسابات الدخول.")} ${tr("روابط جداول المعلمين المرسلة سابقًا ستتوقف.")}</p>
+    <div class="wipe-opts">
+      <label class="wipe-opt"><input type="radio" name="wipeMode" value="tt" checked><div><b>${tr("حذف الجداول فقط")}</b><span>${tr("تفرغ كل الجداول وتبقى بيانات المعلمين والمواد والشعب والأقسام والصفوف وأنصبة الحصص، وتقدر توزّع من جديد.")}</span></div></label>
+      <label class="wipe-opt"><input type="radio" name="wipeMode" value="all"><div><b>${tr("حذف كل شيء")}</b><span>${tr("المعلمين، الأقسام، الصفوف، الشعب، المواد، الجداول، ملف نور المحفوظ، وسجل الغياب والاحتياط. روابط جداول المعلمين المرسلة سابقًا ستتوقف.")}</span></div></label>
+    </div>
+    <p class="muted" style="font-size:.85rem">${tr("في الحالتين تبقى: بيانات المدرسة، أوقات الدوام والحصص، الاشتراك، وحسابات الدخول.")} <b>${tr("لا يمكن التراجع عن الحذف.")}</b></p>
     <div class="field"><label>${tf("للتأكيد اكتب كلمة «{0}»", word)}</label><input id="wipeWord" autocomplete="off"></div>
     <div class="modal-actions"><button class="btn danger" id="wipeGo" disabled><span data-ic="trash" data-size="18"></span>${tr("حذف نهائي")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
   fillIcons($("modal"));
   $("wipeWord").oninput = e => { $("wipeGo").disabled = e.target.value.trim() !== word; };
   $("wipeGo").onclick = async () => {
     $("wipeGo").disabled = true;
+    const all = document.querySelector("input[name=wipeMode]:checked")?.value === "all";
     openModal(`<div class="gen-box"><div class="spinner"></div><h3>${tr("جارٍ الحذف")}</h3></div>`);
     $("modalBack").dataset.lock = "1";
     clearTimeout(TT.timer); TT.dirty = false;
     try {
-      const refs = [...["grades", "sections", "subjects", "teachers", "departments"].flatMap(c => S[c].map(x => dref(c, x.id))),
+      const refs = !all ? [doc(db, "schools", SID, "timetable", "main")] : [...["grades", "sections", "subjects", "teachers", "departments"].flatMap(c => S[c].map(x => dref(c, x.id))),
         ...SUB.abs.map(x => dref("absences", x.id)), ...[...SUB.days.keys()].map(d => doc(db, "schools", SID, "subs", d)),
         doc(db, "schools", SID, "timetable", "main"), doc(db, "schools", SID, "timetable", "published"), doc(db, "schools", SID, "noor", "source")];
       for (let i = 0; i < refs.length; i += 400) { const b = writeBatch(db); refs.slice(i, i + 400).forEach(r => b.delete(r)); await b.commit(); }
       clearTimeout(TT.timer); TT.dirty = false; TT.saving = false; TT.saved = []; TT.lessons = null; TV.sel = null; TV.id = null;
       delete $("modalBack").dataset.lock; closeModal();
-      toast(tr("تم حذف كل البيانات المستوردة"), "success");
+      toast(tr(all ? "تم حذف كل البيانات المستوردة" : "تم حذف كل الجداول، والمعلمون والشعب والمواد باقية"), "success");
       render();
     } catch (e) { delete $("modalBack").dataset.lock; closeModal(); toast(errMsg(e), "error"); }
   };

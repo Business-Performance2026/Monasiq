@@ -907,3 +907,11 @@ select:disabled { opacity: .6; }
 .imp-stats > div { display: flex; flex-direction: column; align-items: center; padding: .55rem .3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-soft, #f5f7fb); }
 .imp-stats > div b { font-size: 1.3rem; color: var(--brand, #012950); line-height: 1.2; }
 .imp-stats > div span { font-size: .78rem; color: var(--muted, #667); }
+.wipe-opts { display: flex; flex-direction: column; gap: .5rem; margin: .4rem 0 .6rem; }
+.wipe-opt { display: flex; gap: .6rem; align-items: flex-start; padding: .7rem .8rem; border: 1.5px solid var(--line); border-radius: 12px; cursor: pointer; }
+.wipe-opt input { margin-top: .25rem; accent-color: var(--bad); }
+.wipe-opt div { display: flex; flex-direction: column; gap: .15rem; }
+.wipe-opt span { font-size: .82rem; color: var(--muted, #667); }
+.wipe-opt:has(input:checked) { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 6%, transparent); }
+.wipe-opt div { flex: 1; } .wipe-opt span { font-weight: 400; line-height: 1.6; } .wipe-opt input { flex: none; }
+.wipe-opt input[type=radio] { width: auto; min-width: 0; height: auto; padding: 0; flex: none; }
