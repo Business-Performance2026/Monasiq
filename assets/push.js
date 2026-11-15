@@ -1,6 +1,6 @@
 // إشعارات الجوال (Firebase Cloud Messaging)
-import { app, db, tr } from "./app.js?v=202611142118";
-import { firebaseConfig } from "./config.js?v=202611142118";
+import { app, db, tr } from "./app.js?v=202611142135";
+import { firebaseConfig } from "./config.js?v=202611142135";
 import { doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const MSG = "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";

@@ -1,8 +1,9 @@
 // لوحة إدارة المنصة: المدارس، طلبات الاشتراك، إعدادات الاشتراك
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, tr, lang, isEn, fillIcons, sendReset, norm } from "./app.js?v=202611142118";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, tr, lang, isEn, fillIcons, sendReset, norm } from "./app.js?v=202611142135";
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, getDocs, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { watchBilling, subState, nextExpiry, fmtDate, money, stateLabel, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142118";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142118";
+import { watchBilling, subState, nextExpiry, fmtDate, money, stateLabel, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142135";
+import { WA_ICON as WA, waNumber as waNum } from "./whatsapp.js?v=202611142135";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142135";
 applyBranding();
 
 const $ = id => document.getElementById(id);
@@ -26,7 +27,7 @@ function start() {
   $("modalBack").addEventListener("click", e => { if (e.target.id === "modalBack" || e.target.closest("[data-close]")) closeModal(); });
 
   let schools = [], pays = [], cfg = { ...BILLING_DEFAULT }, filter = "pending", q = "", payFilter = "pending", pub = null, syncWarned = false, backfilled = false, lastPending = -1;
-  const view = () => (["schools", "payments", "billing"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "schools");
+  const view = () => (["stats", "schools", "payments", "billing"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "stats");
 
   onSnapshot(collection(db, "schools"), snap => {
     schools = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -83,13 +84,104 @@ function start() {
     document.querySelectorAll("[data-bell-n], [data-pay-n]").forEach(b => { b.textContent = nP; b.classList.toggle("hidden", !nP); });
     document.title = (nP ? `(${nP}) ` : "") + tr("إدارة المنصة");
     const main = $("main");
-    if (v === "payments") main.innerHTML = vPayments();
+    if (v === "stats") main.innerHTML = vStats();
+    else if (v === "payments") main.innerHTML = vPayments();
     else if (v === "billing") main.innerHTML = vBillingCfg();
     else main.innerHTML = vSchools();
     fillIcons(main);
     drawPush($("pushBox"), v !== "billing");
     BIND[v]?.();
   }
+
+
+  const BIND = {};
+  // ---------- الإحصائيات ----------
+  const monthsBack = n => { const out = [], d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); for (let i = n - 1; i >= 0; i--) { const x = new Date(d); x.setMonth(d.getMonth() - i); out.push(x); } return out; };
+  const mKey = ms => { const d = new Date(ms); return `${d.getFullYear()}-${d.getMonth()}`; };
+  const mLabel = d => d.toLocaleDateString(isEn ? "en-GB" : "ar-OM", { month: "short" });
+  const createdMs = s => s.createdAt?.toDate ? s.createdAt.toDate().getTime() : (s.createdAt?.seconds ? s.createdAt.seconds * 1000 : 0);
+  // مخطط أعمدة بسيط (سلسلة واحدة) مع تلميح عند المرور أو اللمس
+  function barChart(id, months, values, fmt) {
+    const max = Math.max(1, ...values), W = 640, H = 240, padB = 34, padT = 26, n = values.length, gap = 2, bw = (W - gap * (n - 1)) / n;
+    const nice = (() => { const p = Math.pow(10, Math.floor(Math.log10(max))); return Math.ceil(max / p) * p; })();
+    const y = v => padT + (H - padT - padB) * (1 - v / nice);
+    const grid = [0, .5, 1].map(f => `<line x1="0" x2="${W}" y1="${y(nice * f)}" y2="${y(nice * f)}" class="cg"/><text x="${isEn ? 2 : W - 2}" y="${y(nice * f) - 3}" class="ct" text-anchor="${isEn ? "start" : "end"}">${fmt(nice * f)}</text>`).join("");
+    const order = isEn ? values.map((v, i) => i) : values.map((v, i) => n - 1 - i); // من اليمين في العربية
+    const bars = values.map((v, i) => {
+      const x = order[i] * (bw + gap), top = y(v), h = Math.max(0, H - padB - top), r = Math.min(4, bw / 2, h);
+      const path = h ? `M${x},${H - padB} V${top + r} Q${x},${top} ${x + r},${top} H${x + bw - r} Q${x + bw},${top} ${x + bw},${top + r} V${H - padB} Z` : "";
+      return `<g class="cb" data-tip="${esc(mLabel(months[i]) + " " + months[i].getFullYear() + ": " + fmt(v))}"><rect x="${x}" y="${padT}" width="${bw}" height="${H - padT}" fill="transparent"/>${path ? `<path d="${path}"/>` : ""}
+        ${(n - 1 - i) % 2 === 0 ? `<text x="${x + bw / 2}" y="${H - 8}" class="cx" text-anchor="middle">${esc(mLabel(months[i]))}</text>` : ""}</g>`;
+    }).join("");
+    return `<div class="chart" id="${id}"><svg viewBox="0 0 ${W} ${H}" role="img">${grid}${bars}</svg><div class="ctip hidden"></div></div>`;
+  }
+  function vStats() {
+    const now = Date.now(), act = schools.filter(s => s.status === "active");
+    const st = act.map(s => ({ s, st: subState(s, cfg) }));
+    const paid = st.filter(x => x.st.state === "active"), trial = st.filter(x => x.st.state === "trial"), expired = st.filter(x => x.st.state === "expired");
+    const approved = pays.filter(p => p.status === "approved");
+    const yearStart = nextExpiry(now, cfg) - 365 * DAY; // بداية سنة الاشتراك الحالية
+    const revYear = approved.filter(p => (p.decidedAt || p.createdAt) > yearStart).reduce((a, p) => a + (+p.amount || 0), 0);
+    const revAll = approved.reduce((a, p) => a + (+p.amount || 0), 0);
+    const pendAmt = pays.filter(p => p.status === "pending").reduce((a, p) => a + (+p.amount || 0), 0);
+    const months = monthsBack(12), idx = new Map(months.map((m, i) => [`${m.getFullYear()}-${m.getMonth()}`, i]));
+    const rev = months.map(() => 0), newS = months.map(() => 0);
+    approved.forEach(p => { const i = idx.get(mKey(p.decidedAt || p.createdAt)); if (i != null) rev[i] += +p.amount || 0; });
+    schools.forEach(s => { const c = createdMs(s); if (!c) return; const i = idx.get(mKey(c)); if (i != null) newS[i]++; });
+    const soon = paid.filter(x => x.st.daysLeft <= 30).sort((a, b) => a.st.daysLeft - b.st.daysLeft);
+    const trialSoon = trial.filter(x => x.st.daysLeft != null && x.st.daysLeft <= 3).sort((a, b) => a.st.daysLeft - b.st.daysLeft);
+    const exp = expired.sort((a, b) => b.st.until - a.st.until);
+    const conv = act.length ? Math.round(paid.length / act.length * 100) : 0;
+    const row = (x, note) => `<div class="st-row" data-id="${x.s.id}">
+      <div><b data-no-i18n>${esc(x.s.name)}</b><small class="muted">${esc(note)}</small></div>
+      <div class="row-actions">${x.s.phone ? `<button class="wa-btn" data-remind="${x.s.id}" title="${esc(tr("تذكير عبر واتساب"))}">${WA}</button>` : ""}<button class="btn sm" data-sub="${x.s.id}">${tr("الاشتراك")}</button></div></div>`;
+    return `<div class="page-title"><h1>${tr("الإحصائيات")}</h1></div>
+      <div class="stats st-kpi">
+        <div class="stat"><div class="n">${schools.length}</div><div class="l">${tr("إجمالي المدارس")}</div></div>
+        <div class="stat"><div class="n" style="color:var(--ok)">${paid.length}</div><div class="l">${tr("اشتراك مدفوع")}</div></div>
+        <div class="stat"><div class="n">${trial.length}</div><div class="l">${tr("فترة تجريبية")}</div></div>
+        <div class="stat"><div class="n" style="color:var(--bad)">${expired.length}</div><div class="l">${tr("اشتراك منتهي")}</div></div>
+      </div>
+      <div class="stats st-kpi">
+        <div class="stat"><div class="n">${esc(money(revYear, cfg))}</div><div class="l">${tr("إيرادات السنة الحالية")}</div></div>
+        <div class="stat"><div class="n">${esc(money(revAll, cfg))}</div><div class="l">${tr("إجمالي الإيرادات")}</div></div>
+        <div class="stat"><div class="n" style="color:var(--warn)">${esc(money(pendAmt, cfg))}</div><div class="l">${tr("بانتظار المراجعة")}</div></div>
+        <div class="stat"><div class="n">${conv}%</div><div class="l">${tr("نسبة المدارس المشتركة")}</div></div>
+      </div>
+      <div class="grid-2 st-charts">
+        <div class="card"><h3>${tr("الإيرادات حسب الشهر")}</h3><p class="muted st-sub">${tr("آخر 12 شهرًا · حسب تاريخ التفعيل")}</p>${barChart("chRev", months, rev, v => money(Math.round(v), cfg))}</div>
+        <div class="card"><h3>${tr("المدارس الجديدة حسب الشهر")}</h3><p class="muted st-sub">${tr("آخر 12 شهرًا · حسب تاريخ التسجيل")}</p>${barChart("chNew", months, newS, v => String(Math.round(v)))}</div>
+      </div>
+      <div class="card"><div class="card-head"><h3>⏰ ${tr("اقترب انتهاء اشتراكها")}</h3><span class="muted">${esc(t("خلال 30 يومًا · {0}", soon.length))}</span></div>
+        ${soon.length ? soon.map(x => row(x, t("ينتهي بعد {0} يوم · {1}", x.st.daysLeft, fmtDate(x.st.until)))).join("") : `<p class="muted" style="margin:0">${tr("لا توجد مدارس")}</p>`}</div>
+      <div class="card"><div class="card-head"><h3>🔴 ${tr("لم تجدد (اشتراك منتهي)")}</h3><span class="muted">${exp.length}</span></div>
+        ${exp.length ? exp.map(x => row(x, t("منتهي منذ {0}", fmtDate(x.st.until)))).join("") : `<p class="muted" style="margin:0">${tr("لا توجد مدارس")}</p>`}</div>
+      <div class="card"><div class="card-head"><h3>🧪 ${tr("تجربة تنتهي قريبًا")}</h3><span class="muted">${trialSoon.length}</span></div>
+        ${trialSoon.length ? trialSoon.map(x => row(x, t("باقي {0} يوم من التجربة", x.st.daysLeft))).join("") : `<p class="muted" style="margin:0">${tr("لا توجد مدارس")}</p>`}</div>`;
+  }
+  BIND.stats = () => {
+    document.querySelectorAll(".chart").forEach(ch => {
+      const tip = ch.querySelector(".ctip");
+      const show = (g, e) => {
+        ch.querySelectorAll(".cb.on").forEach(x => x.classList.remove("on")); g.classList.add("on");
+        tip.textContent = g.dataset.tip; tip.classList.remove("hidden");
+        const r = ch.getBoundingClientRect(), gr = g.getBoundingClientRect();
+        tip.style.left = Math.min(r.width - tip.offsetWidth, Math.max(0, gr.left - r.left + gr.width / 2 - tip.offsetWidth / 2)) + "px";
+      };
+      ch.querySelectorAll(".cb").forEach(g => { g.onmouseenter = e => show(g, e); g.onclick = e => show(g, e); });
+      ch.onmouseleave = () => { tip.classList.add("hidden"); ch.querySelectorAll(".cb.on").forEach(x => x.classList.remove("on")); };
+    });
+    $("main").onclick = e => {
+      const s = schools.find(x => x.id === (e.target.closest("[data-sub]")?.dataset.sub || e.target.closest("[data-remind]")?.dataset.remind));
+      if (!s) return;
+      if (e.target.closest("[data-sub]")) return subModal(s);
+      const st = subState(s, cfg), n = waNum(s.phone);
+      const msg = st.state === "expired"
+        ? t("السلام عليكم، نذكّركم بأن اشتراك {0} في منصة مُنسِّق قد انتهى. يمكنكم التجديد من صفحة «اشتراكاتي» في لوحة المدرسة. شكرًا لكم.", s.name)
+        : t("السلام عليكم، نذكّركم بأن اشتراك {0} في منصة مُنسِّق ينتهي في {1}. يمكنكم التجديد من صفحة «اشتراكاتي» في لوحة المدرسة. شكرًا لكم.", s.name, fmtDate(st.until));
+      if (n) window.open(`https://wa.me/${n}?text=${encodeURIComponent(msg)}`, "_blank");
+    };
+  };
 
   // ---------- المدارس ----------
   function vSchools() {
@@ -140,7 +232,6 @@ function start() {
       <div class="row-actions">${acts.join("")}</div>
     </div>`;
   }
-  const BIND = {};
   BIND.schools = () => {
     $("filters").onclick = e => { const b = e.target.closest("button"); if (!b) return; filter = b.dataset.f; render(); };
     $("search").oninput = e => { q = e.target.value.trim(); const pos = e.target.selectionStart; render(); const i = $("search"); i.focus(); i.setSelectionRange(pos, pos); };

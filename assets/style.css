@@ -839,3 +839,22 @@ body.ro #view .tt-hint { display: none; }
 .doc-tbl td { padding: 9px; border: 1px solid #e2e8f0; text-align: center; }
 .doc-tbl tr:nth-child(even) td { background: #f8fafc; }
 .today-item.is-sub { background: var(--gold-soft); }
+
+/* لوحة الإحصائيات */
+.st-kpi { margin-bottom: 1rem; }
+.st-kpi .n { font-size: 1.6rem; }
+.st-charts { gap: 1rem; margin-bottom: 1rem; align-items: stretch; }
+.st-charts .card { margin: 0; }
+.st-sub { font-size: .8rem; margin: -.3rem 0 .6rem; }
+.chart { position: relative; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .cg { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart .ct, .chart .cx { fill: var(--muted); font-size: 19px; font-family: inherit; }
+.chart .cb path { fill: var(--primary-2); transition: fill .15s; }
+.chart .cb.on path, .chart .cb:hover path { fill: var(--primary); }
+.chart .cb { cursor: pointer; }
+.ctip { position: absolute; top: -6px; background: var(--ink); color: #fff; font-size: .8rem; padding: .25rem .55rem; border-radius: 8px; white-space: nowrap; pointer-events: none; }
+.st-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .55rem 0; border-bottom: 1px solid var(--line); }
+.st-row:last-child { border-bottom: 0; }
+.st-row > div:first-child { display: flex; flex-direction: column; min-width: 0; }
+@media (max-width: 760px) { .st-charts { grid-template-columns: 1fr; } }
