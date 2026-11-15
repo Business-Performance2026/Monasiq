@@ -1,6 +1,6 @@
 // استيراد ملف XML من برنامج aSc Timetables (صيغة «Oman XML» التي ترفعها المدارس للوزارة، أو تصدير aSc العادي)
 // يقرأ: الفترات وأوقاتها، المعلمين، المواد، الصفوف والشعب، ومكان كل حصة في الجدول
-import { norm } from "./app.js?v=202611150718";
+import { norm } from "./app.js?v=202611150751";
 
 const DAY_NAMES = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 const GRADE_NAMES = ["الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس", "السابع", "الثامن", "التاسع", "العاشر", "الحادي عشر", "الثاني عشر"];
@@ -113,7 +113,7 @@ export async function parseAscXml(file, current = {}) {
   const data = {
     format: "monasiq-import", version: 1, source: "aSc XML",
     settings: okTimes ? { days, periods: periods.slice(0, maxP).map(x => ({ start: x.start, end: x.end })) } : { days, periodsCount: maxP },
-    grades: gradeIds.map(g => { const s = secs.find(x => x.gradeId === g); return { key: "g" + g, name: (s.gradeName || "").trim() || GRADE_NAMES[(s.code || 1) - 1], code: s.code || "" }; }),
+    grades: gradeIds.map(g => { const s = secs.find(x => x.gradeId === g); return { key: "g" + g, ext: g, name: (s.gradeName || "").trim() || GRADE_NAMES[(s.code || 1) - 1], code: s.code || "" }; }),
     sections: secs.map(s => {
       // يوم كامل لمعلم واحد في الشعبة (مثل السفر والسياحة) → قيد «يوم مخصص لمعلم»
       const own = [];
@@ -122,7 +122,7 @@ export async function parseAscXml(file, current = {}) {
         const ts = new Set(dl.map(x => x.t));
         if (dl.length >= maxP - 1 && ts.size === 1) own.push({ d, t: "t" + [...ts][0], rest: "free" });
       }
-      return { key: "c" + s.id, grade: "g" + s.gradeId, num: s.num, ...(own.length ? { rules: { free: [], days: own } } : {}) };
+      return { key: "c" + s.id, ext: s.id, grade: "g" + s.gradeId, num: s.num, ...(own.length ? { rules: { free: [], days: own } } : {}) };
     }),
     subjects: subjIds.map((id, i) => {
       const periodsBy = {};
@@ -131,7 +131,7 @@ export async function parseAscXml(file, current = {}) {
         const vals = gs.map(s => per.get(id + "|" + s.id) || 0);
         if (vals.every(v => v > 0)) periodsBy["g" + g] = mode(vals);
       }
-      return { key: "s" + id, name: subjects.get(id), color: COLORS[i % COLORS.length], periods: periodsBy };
+      return { key: "s" + id, ext: id, name: subjects.get(id), color: COLORS[i % COLORS.length], periods: periodsBy };
     }),
     teachers: teacherIds.map(id => {
       const mine = [...asg].filter(([k]) => k.startsWith(id + "|"));
@@ -139,7 +139,7 @@ export async function parseAscXml(file, current = {}) {
       const sc = new Map(); mine.forEach(([k, n]) => { const s = k.split("|")[1]; sc.set(s, (sc.get(s) || 0) + (n || 1)); });
       const main = [...sc].sort((a, b) => b[1] - a[1])[0]?.[0];
       return {
-        key: "t" + id, name: teachers.get(id), subject: main ? "s" + main : "", maxLoad: total || "",
+        key: "t" + id, ext: id, name: teachers.get(id), subject: main ? "s" + main : "", maxLoad: total || "",
         assignments: mine.map(([k, n]) => { const [, s, c] = k.split("|"); return { subject: "s" + s, section: "c" + c, periods: n }; })
       };
     }),
@@ -147,5 +147,6 @@ export async function parseAscXml(file, current = {}) {
   };
   const withLessons = data.teachers.filter(t => t.assignments.length).length;
   if (withLessons < data.teachers.length) warnings.push(`${data.teachers.length - withLessons} معلم بدون حصص في هذا الملف — أُضيفوا للمدرسة بدون إسناد`);
+  if (sched.length) data.noorSource = { text, name: file.name, encoding: enc };
   return { data, warnings: [...new Set(warnings)].slice(0, 30), stats: { lessons: kept.length, sections: secs.length, teachers: data.teachers.length } };
 }

@@ -885,3 +885,4 @@ select:disabled { opacity: .6; }
 .sugg-i.hit::after { content: attr(data-pick); }
 .imp-picked { margin-top: .5rem; display: flex; align-items: center; gap: .4rem; background: var(--primary-soft); border-radius: 10px; padding: .4rem .7rem; font-size: .9rem; }
 .imp-picked .btn { margin-inline-start: auto; }
+.noor-steps { padding-inline-start: 1.2rem; display: flex; flex-direction: column; gap: .4rem; }

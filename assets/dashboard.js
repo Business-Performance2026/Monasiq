@@ -1,18 +1,19 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611150718";
-import { setLang } from "./i18n.js?v=202611150718";
-import { schedule, reconcile } from "./scheduler.js?v=202611150718";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611150718";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611150718";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611150718";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611150718";
-import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611150718";
-import { parseAscXml } from "./xml-import.js?v=202611150718";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611150718";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611150718";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611150718";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611150751";
+import { setLang } from "./i18n.js?v=202611150751";
+import { schedule, reconcile } from "./scheduler.js?v=202611150751";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611150751";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611150751";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611150751";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611150751";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611150751";
+import { parseAscXml } from "./xml-import.js?v=202611150751";
+import { gzipText, gunzipText, buildNoorXml } from "./noor-export.js?v=202611150751";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611150751";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611150751";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611150751";
 import {
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
+  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where, getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 applyBranding();
@@ -155,7 +156,7 @@ const curSub = () => subState(S.school, B.cfg);
 const isRO = () => !!S.school && curSub().state === "expired";
 const pendingPay = () => B.pays.find(p => p.status === "pending");
 function roToast() { toast(tr("انتهى الاشتراك: يمكنك المشاهدة والتحميل فقط. جدّد من صفحة «اشتراكاتي»."), "error"); }
-const RO_ALLOW = "#notiOld,[data-push],[data-pr],[data-act=wa],.wa-btn,.ld-head,.fold-head,.gh,#ttMode,#ttPrev,#ttNext,.tt-find,#ttPrint,#expPdfT,#expPdfS,[data-close],.x,.lang-btn,[data-bell],#billView,.ld-filters,#tFoldAll,.t-group-head,#xlsTpl,#dlCancel,.sub-banner";
+const RO_ALLOW = "#expNoor,#noorDl,#notiOld,[data-push],[data-pr],[data-act=wa],.wa-btn,.ld-head,.fold-head,.gh,#ttMode,#ttPrev,#ttNext,.tt-find,#ttPrint,#expPdfT,#expPdfS,[data-close],.x,.lang-btn,[data-bell],#billView,.ld-filters,#tFoldAll,.t-group-head,#xlsTpl,#dlCancel,.sub-banner";
 function roGuard(e) {
   if (!isRO()) return;
   const t = e.target;
@@ -741,6 +742,60 @@ function bindBulkFree() {
   };
 }
 
+
+// =====================================================
+//  ملف نور (XML) — تصدير الجدول بصيغة الوزارة
+// =====================================================
+async function saveNoorSource(src) {
+  const gz = await gzipText(src.text);
+  if (gz.length > 900000) throw new Error("too-big");
+  await setDoc(doc(db, "schools", SID, "noor", "source"), { gz, name: src.name || "", encoding: src.encoding || "windows-1256", size: src.text.length, at: Date.now() });
+}
+async function noorExport() {
+  ttSync();
+  let src;
+  try { const d = await getDoc(doc(db, "schools", SID, "noor", "source")); src = d.exists() ? d.data() : null; } catch (e) { return toast(errMsg(e), "error"); }
+  if (!src) {
+    return openModal(`${modalHead(tr("ملف نور (XML)"))}
+      <p>${tr("لتصدير ملف نور تحتاج المنصة ملف الوزارة الأصلي مرة واحدة، لأن فيه أرقام المعلمين والشعب والطلاب كما في نظام الوزارة.")}</p>
+      <ol class="noor-steps"><li>${tr("استورد ملف XML الخاص بمدرستك (الذي يُرفع على نور) من: إعدادات الدوام ← استيراد البيانات.")}</li>
+      <li>${tr("وزّع الجدول وعدّله كما تريد.")}</li><li>${tr("ثم صدّر ملف نور من هنا وارفعه على البوابة.")}</li></ol>
+      <div class="modal-actions"><a class="btn primary" href="#settings" data-close>${tr("الذهاب للاستيراد")}</a><button class="btn ghost" data-close>${tr("إغلاق")}</button></div>`);
+  }
+  let text;
+  try { text = await gunzipText(src.gz); } catch { return toast(tr("تعذّر قراءة ملف الوزارة المحفوظ"), "error"); }
+  const lessons = TT.lessons || TT.saved || [];
+  const unplaced = lessons.filter(x => x.d == null).length;
+  const noExt = { t: new Set(), c: new Set() };
+  const placed = [];
+  for (const x of lessons) {
+    if (x.d == null) continue;
+    const t = teacherOf(x.t), c = section(x.c), sb = subject(x.s);
+    if (!t?.extId) { noExt.t.add(x.t); continue; }
+    if (!c?.extId) { noExt.c.add(x.c); continue; }
+    if (!sb?.extId) continue;
+    placed.push({ t: t.extId, s: sb.extId, c: c.extId, d: x.d, p: x.p });
+  }
+  const r = buildNoorXml(text, placed, src.encoding);
+  if (r.error) return toast(tr("لا توجد حصص تخص شعب ملف الوزارة"), "error");
+  const warn = [...r.warnings];
+  if (unplaced) warn.unshift(tf("{0} حصة لم توزّع بعد — وزّعها قبل الرفع", unplaced));
+  if (noExt.t.size) warn.push(tf("{0} معلم بدون رقم وزارة (أُضيف يدويًا) — حصصه لم تُضمَّن", noExt.t.size));
+  const name = (src.name || "TimeTable").replace(/\.xml$/i, "") + ".xml";
+  openModal(`${modalHead(tr("تصدير ملف نور (XML)"))}
+    <div class="imp-stats"><div><b>${r.stats.lessons}</b><span>${tr("حصة")}</span></div><div><b>${r.stats.sections}</b><span>${tr("شعبة")}</span></div><div><b>${r.stats.teachers}</b><span>${tr("معلم")}</span></div></div>
+    ${warn.length ? `<div class="notice warn"><b>${tr("ملاحظات")}:</b><ul>${warn.map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>` : `<div class="notice ok">${tr("الملف جاهز. باقي بيانات ملف الوزارة (الطلاب والمجموعات والأرقام) بقيت كما هي.")}</div>`}
+    <p class="muted" style="font-size:.85rem">${tr("ارفع الملف على بوابة الوزارة كما كنت ترفع ملف aSc.")}</p>
+    <div class="modal-actions"><button class="btn primary" id="noorDl"><span data-ic="download" data-size="18"></span>${tr("تحميل الملف")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+  fillIcons($("modal"));
+  $("noorDl").onclick = () => {
+    const url = URL.createObjectURL(new Blob([r.bytes], { type: "application/xml" }));
+    const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    closeModal(); toast(tr("تم تحميل ملف نور"), "success");
+  };
+}
+
 // ---------- نافذة منبثقة ----------
 function openModal(html) { $("modal").innerHTML = html; $("modalBack").classList.add("show"); }
 function closeModal() { $("modalBack").classList.remove("show"); $("modal").innerHTML = ""; }
@@ -910,6 +965,7 @@ function vSettings() {
     <div class="row-actions">
       <button class="btn" id="expPdfT"><span data-ic="download" data-size="18"></span>تحميل جداول المعلمين PDF</button>
       <button class="btn" id="expPdfS"><span data-ic="download" data-size="18"></span>تحميل جداول الشعب PDF</button>
+      <button class="btn" id="expNoor"><span data-ic="upload" data-size="18"></span>${tr("تصدير ملف نور (XML)")}</button>
     </div>
   </div>`;
 }
@@ -1053,6 +1109,7 @@ BIND.settings = v => {
   };
   $("xlsTpl").onclick = e => { e.preventDefault(); downloadTemplate(null, tr("نموذج بيانات المدرسة")).catch(() => toast("تعذّر إنشاء الملف", "error")); };
   $("expPdfT").onclick = () => downloadAll("teacher");
+  $("expNoor").onclick = noorExport;
   $("expPdfS").onclick = () => downloadAll("section");
   $("infoForm").onsubmit = async e => {
     e.preventDefault();
@@ -1126,18 +1183,19 @@ async function importData(data, replace) {
     (data.subjects || []).forEach(x => mk("subjects", x.key));
     (data.teachers || []).forEach(x => mk("teachers", x.key));
     const G = k => id["grades:" + k], C = k => id["sections:" + k], SB = k => id["subjects:" + k], T = k => id["teachers:" + k];
-    for (const g of data.grades || []) ops.push(b => b.set(doc(db, "schools", SID, "grades", G(g.key)), { name: g.name, code: String(g.code), createdAt: serverTimestamp() }));
+    const ext = x => (x.ext != null && x.ext !== "" ? { extId: String(x.ext) } : {});
+    for (const g of data.grades || []) ops.push(b => b.set(doc(db, "schools", SID, "grades", G(g.key)), { name: g.name, code: String(g.code), ...ext(g), createdAt: serverTimestamp() }));
     for (const x of data.sections || []) {
       const rules = x.rules ? { free: x.rules.free || [], days: (x.rules.days || []).filter(o => T(o.t)).map(o => ({ d: o.d, t: T(o.t), rest: o.rest || "free" })) } : null;
-      ops.push(b => b.set(doc(db, "schools", SID, "sections", C(x.key)), { gradeId: G(x.grade), num: String(x.num), ...(rules && (rules.free.length || rules.days.length) ? { rules } : {}) }));
+      ops.push(b => b.set(doc(db, "schools", SID, "sections", C(x.key)), { gradeId: G(x.grade), num: String(x.num), ...ext(x), ...(rules && (rules.free.length || rules.days.length) ? { rules } : {}) }));
     }
     for (const x of data.subjects || []) {
       const periods = {}; for (const [gk, n] of Object.entries(x.periods || {})) if (G(gk)) periods[G(gk)] = num(n);
-      ops.push(b => b.set(doc(db, "schools", SID, "subjects", SB(x.key)), { name: x.name, color: x.color || "#0f766e", periods, createdAt: serverTimestamp() }));
+      ops.push(b => b.set(doc(db, "schools", SID, "subjects", SB(x.key)), { name: x.name, color: x.color || "#0f766e", periods, ...ext(x), createdAt: serverTimestamp() }));
     }
     for (const x of data.teachers || []) {
       const assignments = (x.assignments || []).filter(a => SB(a.subject) && C(a.section)).map(a => ({ subjectId: SB(a.subject), sectionId: C(a.section), periods: num(a.periods) }));
-      ops.push(b => b.set(doc(db, "schools", SID, "teachers", T(x.key)), { name: x.name, phone: x.phone || "", subjectId: SB(x.subject) || "", maxLoad: num(x.maxLoad), assignments, createdAt: serverTimestamp() }));
+      ops.push(b => b.set(doc(db, "schools", SID, "teachers", T(x.key)), { name: x.name, phone: x.phone || "", subjectId: SB(x.subject) || "", maxLoad: num(x.maxLoad), assignments, ...ext(x), createdAt: serverTimestamp() }));
     }
     await flush("استيراد الصفوف والمواد والمعلمين", 20, 85);
     if (data.timetable?.length) {
@@ -1150,6 +1208,8 @@ async function importData(data, replace) {
       await setDoc(doc(db, "schools", SID, "timetable", "published"), { lessons: lessons.filter(x => x.d != null).map(x => ({ t: x.t, s: x.s, c: x.c, d: x.d, p: x.p })), at: Date.now() }).catch(() => {});
       TT.saving = false; TT.saved = lessons; TT.lessons = null;
     }
+    // ملف الوزارة الأصلي: نحفظه لنصدّر منه ملف نور لاحقًا
+    if (data.noorSource?.text) { step(95, "حفظ ملف الوزارة"); await saveNoorSource(data.noorSource).catch(e => console.warn("noor", e)); }
     step(100, "تم");
     delete $("modalBack").dataset.lock;
     closeModal();
@@ -2358,6 +2418,8 @@ function ttPrintMenu() {
       <div class="print-sep">${tr("ملف PDF واحد — 6 جداول في كل صفحة")}</div>
       <button class="btn block" data-pr="dlTeachers"><span data-ic="download" data-size="18"></span>تحميل جداول كل المعلمين PDF</button>
       <button class="btn block" data-pr="dlSections"><span data-ic="download" data-size="18"></span>تحميل جداول كل الشعب PDF</button>
+      <div class="print-sep">${tr("منصة الوزارة")}</div>
+      <button class="btn block" data-pr="noor"><span data-ic="upload" data-size="18"></span>${tr("تصدير ملف نور (XML)")}</button>
     </div>`);
   fillIcons($("modal"));
   $("modal").onclick = async e => {
@@ -2366,6 +2428,7 @@ function ttPrintMenu() {
     const k = b.dataset.pr;
     if (k === "dlTeachers") return downloadAll("teacher");
     if (k === "dlSections") return downloadAll("section");
+    if (k === "noor") return noorExport();
     if (k === "dl") {
       const sh = sheetFor(TV.mode, TV.id);
       try { toast(tr("جارٍ تجهيز الملف")); await downloadSheetsPDF([sh], sh.title); }
