@@ -60,6 +60,27 @@ exports.onSchoolNotification = onDocumentCreated("schools/{sid}/notifications/{n
   await push(userTokens(e.params.sid), n.title || "مُنسِّق", n.body || "", "dashboard.html#billing");
 });
 
+// تحديث جدول المعلمين: إشعار داخل المنصة + إشعار جوال لكل معلم تغيّر جدوله
+exports.onTimetablePublished = onDocumentCreated("schools/{sid}/publishes/{pid}", async e => {
+  const pub = e.data?.data(); if (!pub?.items?.length) return;
+  const sid = e.params.sid;
+  const accs = await db.collection("teacherAccounts").where("schoolId", "==", sid).get();
+  let sent = 0;
+  for (const it of pub.items) {
+    const mine = accs.docs.filter(a => a.get("teacherId") === it.teacherId && a.get("status") === "active");
+    const n = (it.added?.length || 0) + (it.removed?.length || 0);
+    const first = it.added?.[0]?.text || it.removed?.[0]?.text || "";
+    for (const a of mine) {
+      await a.ref.collection("notifications").doc(e.params.pid).set({
+        title: "تم تحديث جدولك 📅", body: n === 1 ? `تغيّرت حصة: ${first}` : `تغيّرت ${n} حصص في جدولك.`,
+        kind: "tt", added: it.added || [], removed: it.removed || [], at: Date.now(), read: false
+      });
+      sent += await push(userTokens(a.id), "تم تحديث جدولك 📅", n === 1 ? `تغيّرت حصة: ${first}` : `تغيّرت ${n} حصص في جدولك. اضغط للاطلاع.`, "teacher.html");
+    }
+  }
+  logger.info("publish", { sid, teachers: pub.items.length, sent });
+});
+
 exports.onPaymentDeleted = onDocumentDeleted("payments/{id}", async e => {
   const path = e.data?.get("receiptPath"); if (!path) return;
   await admin.storage().bucket().file(path).delete().catch(() => {});

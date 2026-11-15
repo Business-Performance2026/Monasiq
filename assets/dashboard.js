@@ -1,14 +1,14 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141950";
-import { setLang } from "./i18n.js?v=202611141950";
-import { schedule, reconcile } from "./scheduler.js?v=202611141950";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611141950";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141950";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141950";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141950";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141950";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141950";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611141950";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142006";
+import { setLang } from "./i18n.js?v=202611142006";
+import { schedule, reconcile } from "./scheduler.js?v=202611142006";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142006";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142006";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142006";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142006";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142006";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142006";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142006";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -99,9 +99,15 @@ function init(user) {
     document.querySelectorAll("[data-acc-badge]").forEach(b => { b.textContent = n; b.classList.toggle("hidden", !n); });
     if (loaded.size >= NEED && ["#accounts", "#overview", ""].includes(location.hash)) render();
   }, () => {});
+  // آخر نسخة أُرسلت للمعلمين (لمعرفة من تغيّر جدوله)
+  onSnapshot(doc(db, "schools", SID, "timetable", "published"), d => {
+    PUB.lessons = d.exists() ? (d.data().lessons || []) : null; PUB.ready = true;
+    ensureBaseline(); updatePubBar();
+  }, () => { PUB.ready = true; });
   onSnapshot(doc(db, "schools", SID, "timetable", "main"), d => {
     const incoming = d.exists() ? (d.data().lessons || []) : [];
     TT.saved = incoming;
+    ensureBaseline();
     if (!loaded.has("timetable")) return mark("timetable");
     if (TT.dirty || TT.saving) return;
     const js = JSON.stringify(incoming);
@@ -306,6 +312,88 @@ BIND.billing = v => {
     } catch (e) { btn.disabled = false; btn.textContent = tr("إرسال الوصل"); toast(errMsg(e), "error"); }
   };
 };
+
+
+// =====================================================
+//  إرسال تحديث الجدول للمعلمين
+// =====================================================
+const PUB = { lessons: null, ready: false, baselineTried: false };
+const placedOf = arr => (arr || []).filter(x => x.d != null && x.p != null);
+const lkey = x => `${x.d}|${x.p}|${x.c}|${x.s}`;
+// أول مرة: نعتبر الجدول الحالي هو المُرسل (بدون إشعار)
+function ensureBaseline() {
+  if (!PUB.ready || PUB.lessons || PUB.baselineTried || !TT.saved || isRO()) return;
+  PUB.baselineTried = true;
+  const lessons = placedOf(TT.saved).map(x => ({ t: x.t, s: x.s, c: x.c, d: x.d, p: x.p }));
+  setDoc(doc(db, "schools", SID, "timetable", "published"), { lessons, at: Date.now() }).catch(() => {});
+}
+// التغييرات لكل معلم: حصص أُضيفت وحصص أُزيلت مقارنة بآخر إرسال
+function ttChanges() {
+  if (!PUB.lessons) return new Map();
+  const cur = placedOf(TT.lessons || TT.saved), old = placedOf(PUB.lessons);
+  const by = (arr) => { const m = new Map(); for (const x of arr) { if (!m.has(x.t)) m.set(x.t, new Set()); m.get(x.t).add(lkey(x)); } return m; };
+  const A = by(cur), B = by(old), out = new Map();
+  for (const t of new Set([...A.keys(), ...B.keys()])) {
+    if (!teacherOf(t)) continue;
+    const a = A.get(t) || new Set(), b = B.get(t) || new Set();
+    const added = [...a].filter(k => !b.has(k)), removed = [...b].filter(k => !a.has(k));
+    if (added.length || removed.length) out.set(t, { added, removed });
+  }
+  return out;
+}
+function chgLabel(k) {
+  const [d, p, c, sb] = k.split("|");
+  return { d: +d, p: +p, text: `${tr(settings().days[+d] || "")} · ${tf("الحصة {0}", +p + 1)} · ${secLabel(section(c))} ${subject(sb)?.name || ""}` };
+}
+function updatePubBar() {
+  const bar = $("pubBar"); if (!bar) return;
+  const ch = ttChanges();
+  bar.innerHTML = ch.size ? `<div class="pub-bar"><span data-ic="bell" data-size="18"></span><span>${esc(tf("تغيّرت جداول {0} معلمين منذ آخر إرسال", ch.size))}</span>
+    <button class="btn sm primary" id="pubBtn">${tr("إرسال التحديث للمعلمين")}</button></div>` : "";
+  fillIcons(bar);
+  if ($("pubBtn")) $("pubBtn").onclick = publishModal;
+}
+const accOfTeacher = tid => S.accounts.find(a => a.teacherId === tid && a.status === "active");
+function publishModal() {
+  ttSync();
+  const ch = ttChanges();
+  const rows = [...ch].map(([tid, c]) => ({ t: teacherOf(tid), c, acc: accOfTeacher(tid) })).sort((a, b) => a.t.name.localeCompare(b.t.name, "ar"));
+  const withAcc = rows.filter(r => r.acc).length;
+  openModal(`${modalHead(tr("إرسال تحديث الجدول للمعلمين"))}
+    <p class="muted" style="margin-top:0">${esc(tf("{0} معلمين تغيّر جدولهم. يصل إشعار لمن لديه حساب في المنصة ({1})، وللباقين يمكنك إرسال الرابط عبر واتساب.", rows.length, withAcc))}</p>
+    <div class="pub-list">${rows.map(r => `<label class="pub-row">
+      <input type="checkbox" data-tid="${r.t.id}" checked>
+      <div class="pub-main"><b data-no-i18n>${esc(r.t.name)}</b>
+        ${r.c.added.map(k => `<small class="add">＋ ${esc(chgLabel(k).text)}</small>`).join("")}
+        ${r.c.removed.map(k => `<small class="rem">− ${esc(chgLabel(k).text)}</small>`).join("")}
+      </div>
+      <span class="pub-ch">${r.acc ? `<span class="badge ok" title="${esc(tr("لديه حساب في المنصة"))}">📱 ${tr("إشعار")}</span>` : teacherPhone(r.t) ? `<button type="button" class="wa-btn" data-wa="${r.t.id}">${WA_ICON}</button>` : `<span class="badge info">${tr("بدون حساب")}</span>`}</span>
+    </label>`).join("")}</div>
+    <div class="modal-actions">
+      <button class="btn primary" id="pubGo">${tr("إرسال")}</button>
+      <button class="btn ghost" id="pubSkip">${tr("تجاهل بدون إشعار")}</button>
+    </div>`);
+  $("modal").querySelectorAll("[data-wa]").forEach(b => (b.onclick = e => { e.preventDefault(); waTeacher(teacherOf(b.dataset.wa)); }));
+  const commit = async notify => {
+    const picked = new Set([...$("modal").querySelectorAll("[data-tid]:checked")].map(i => i.dataset.tid));
+    const items = notify ? rows.filter(r => picked.has(r.t.id)).map(r => ({
+      teacherId: r.t.id, name: r.t.name,
+      added: r.c.added.map(k => chgLabel(k)), removed: r.c.removed.map(k => chgLabel(k))
+    })) : [];
+    const b = writeBatch(db);
+    b.set(doc(db, "schools", SID, "timetable", "published"), { lessons: placedOf(TT.lessons).map(x => ({ t: x.t, s: x.s, c: x.c, d: x.d, p: x.p })), at: Date.now() });
+    if (items.length) b.set(doc(col("publishes")), { at: Date.now(), items, school: S.school.name });
+    // تحديث روابط الواتساب المرسلة سابقًا للمعلمين المتأثرين
+    for (const r of rows) if (r.t.shareId)
+      b.set(doc(db, "shares", r.t.shareId), { schoolId: SID, teacherId: r.t.id, name: r.t.name, sheet: sheetToDoc(sheetFor("teacher", r.t.id)), lang: isEn ? "en" : "ar", updatedAt: serverTimestamp() });
+    try {
+      await b.commit(); closeModal();
+      toast(items.length ? tf("تم إرسال التحديث لـ {0} معلمين", items.length) : tr("تم حفظ الجدول الحالي كآخر نسخة مُرسلة"), "success");
+    } catch (e) { toast(errMsg(e), "error"); }
+  };
+  $("pubGo").onclick = () => commit(true);
+  $("pubSkip").onclick = () => commit(false);
+}
 
 // ---------- نافذة منبثقة ----------
 function openModal(html) { $("modal").innerHTML = html; $("modalBack").classList.add("show"); }
@@ -1546,6 +1634,7 @@ function vTimetable() {
   </div>
 
   <div class="tt-stats" id="ttStats">${ttStatsHTML()}</div>
+  <div id="pubBar"></div>
   ${overT.length || overC.length ? `<div class="notice bad">${overT.map(([id, n]) => esc(tf("المعلم {0} لديه {1} حصة والأسبوع فيه {2} حصة فقط", teacherOf(id)?.name, n, cap))).join("<br>")}${overT.length && overC.length ? "<br>" : ""}${overC.map(([id, n]) => esc(tf("الشعبة {0} لديها {1} حصة والأسبوع فيه {2} حصة فقط", secLabel(section(id)), n, cap))).join("<br>")}</div>` : ""}
 
   <div class="card tt-card">
@@ -1584,6 +1673,7 @@ function ttStatsHTML() {
 // تحديث سريع بعد أي تعديل (بدون إعادة بناء الصفحة)
 function ttRefresh() {
   ttDraw();
+  updatePubBar();
   const st = $("ttStats"); if (st) st.innerHTML = ttStatsHTML();
   const sel = $("ttSel");
   if (sel) {
@@ -1706,6 +1796,7 @@ BIND.timetable = v => {
   $("ttPrev").onclick = () => step(-1);
   $("ttNext").onclick = () => step(1);
   $("ttGen").onclick = ttGenerate;
+  updatePubBar();
   $("ttPrint").onclick = ttPrintMenu;
 
   v.onclick = async e => {

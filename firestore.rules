@@ -83,9 +83,10 @@ service cloud.firestore {
     match /pushTokens/{id} {
       allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
       allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid
-        && request.resource.data.role in ['admin', 'school']
+        && request.resource.data.role in ['admin', 'school', 'teacher']
         && (request.resource.data.role != 'admin' || isAdmin())
-        && (request.resource.data.role != 'school' || request.resource.data.schoolId == request.auth.uid);
+        && (request.resource.data.role != 'school' || request.resource.data.schoolId == request.auth.uid)
+        && (request.resource.data.role != 'teacher' || exists(/databases/$(database)/documents/teacherAccounts/$(request.auth.uid)));
     }
 
     // إعدادات الاشتراك (السعر، رقم التحويل...) — يقرؤها أي مستخدم مسجّل، ويعدّلها المدير
@@ -141,6 +142,14 @@ service cloud.firestore {
       allow delete: if isAdmin()
         || isActiveSchool(resource.data.schoolId)
         || (signedIn() && request.auth.uid == uid && resource.data.status == 'pending');
+
+      // إشعارات المعلم (تحديث الجدول): ينشئها السيرفر، والمعلم يقرأ ويعلّم كمقروء
+      match /notifications/{nid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow create, delete: if isAdmin();
+      }
     }
   }
 }

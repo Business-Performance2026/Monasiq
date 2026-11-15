@@ -1,12 +1,13 @@
 // لوحة المعلم: جدولي، حصص اليوم، حسابي
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611141950";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141950";
-import { buildRules } from "./rules.js?v=202611141950";
-import { collection, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611142006";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142006";
+import { buildRules } from "./rules.js?v=202611142006";
+import { collection, doc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142006";
 
 applyBranding();
 const $ = id => document.getElementById(id);
-const S = { acc: null, school: null, tt: [], subjects: [], sections: [], grades: [], departments: [], teacher: null };
+const S = { acc: null, school: null, tt: [], subjects: [], sections: [], grades: [], departments: [], teacher: null, notes: [] };
 const loaded = new Set();
 const NEED = ["acc", "school", "tt", "subjects", "sections", "grades", "departments", "teacher"];
 const DAY_EN = { "الأحد": "Sun", "الاثنين": "Mon", "الثلاثاء": "Tue", "الأربعاء": "Wed", "الخميس": "Thu", "الجمعة": "Fri", "السبت": "Sat" };
@@ -50,6 +51,47 @@ function init() {
     onSnapshot(collection(db, "schools", sid, k), snap => { S[k] = snap.docs.map(x => ({ id: x.id, ...x.data() })); mark(k); }, err);
   }
   window.addEventListener("resize", () => { if (loaded.size >= NEED.length) drawGrid(); });
+  // إشعارات تحديث الجدول
+  onSnapshot(collection(db, "teacherAccounts", user.uid, "notifications"), snap => {
+    S.notes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at || 0) - (a.at || 0));
+    updateBell(); render();
+  }, () => {});
+  $("bellBtn").onclick = openBell;
+  $("modalBack").addEventListener("click", e => { if (e.target.id === "modalBack" || e.target.closest("[data-close]")) closeModal(); });
+  refreshPush({ uid: user.uid, role: "teacher", schoolId: sid });
+}
+const pushCtx = () => ({ uid: user.uid, role: "teacher", schoolId: role.account.schoolId });
+function openModal(html) { $("modal").innerHTML = html; $("modalBack").classList.add("show"); }
+function closeModal() { $("modalBack").classList.remove("show"); $("modal").innerHTML = ""; }
+const unreadTT = () => S.notes.filter(n => !n.read && n.kind === "tt");
+function updateBell() {
+  const n = S.notes.filter(x => !x.read).length;
+  $("bellN").textContent = n; $("bellN").classList.toggle("hidden", !n);
+}
+function markRead(list = S.notes.filter(x => !x.read)) {
+  if (!list.length) return;
+  const b = writeBatch(db);
+  list.forEach(x => b.update(doc(db, "teacherAccounts", user.uid, "notifications", x.id), { read: true }));
+  b.commit().catch(() => {});
+}
+const when = ms => new Date(ms).toLocaleString(isEn ? "en-GB" : "ar-OM", { dateStyle: "medium", timeStyle: "short" });
+function changesHTML(n) {
+  return `${(n.added || []).map(x => `<small class="add">＋ ${esc(x.text)}</small>`).join("")}${(n.removed || []).map(x => `<small class="rem">− ${esc(x.text)}</small>`).join("")}`;
+}
+async function drawPush(box) {
+  if (!box) return;
+  box.innerHTML = pushCardHTML(await pushState(user.uid), esc);
+  bindPushCard(box, pushCtx(), () => drawPush(box), toast);
+}
+function openBell() {
+  openModal(`<div class="modal-head"><h3>${esc(tr("الإشعارات"))}</h3><button class="x" data-close>×</button></div>
+    <div class="noti-list">${S.notes.length ? S.notes.slice(0, 30).map(n => `<div class="noti ${n.read ? "" : "new"}">
+      <b>${esc(n.title || "")}</b><span>${esc(n.body || "")}</span>${changesHTML(n)}<small>${esc(when(n.at))}</small></div>`).join("")
+      : `<div class="empty">${esc(tr("لا توجد إشعارات"))}</div>`}</div>
+    <div id="pushBox2" style="margin-top:1rem"></div>`);
+  fillIcons($("modal"));
+  drawPush($("pushBox2"));
+  markRead();
 }
 
 const subject = id => S.subjects.find(s => s.id === id);
@@ -81,6 +123,11 @@ function render() {
 
   $("view").innerHTML = `
   <h1 class="tp-hello">${esc(tf("أهلًا، {0}", S.acc.name))} 👋</h1>
+  ${unreadTT().length ? `<div class="tt-upd">
+    <div class="tt-upd-h"><b>📅 ${esc(tr("تم تحديث جدولك"))}</b><button class="btn sm" id="updOk">${esc(tr("حسنًا"))}</button></div>
+    <div class="tt-upd-l">${unreadTT().map(changesHTML).join("")}</div>
+    <small class="muted">${esc(tr("الحصص الجديدة مظللة في الجدول."))}</small>
+  </div>` : ""}
   ${!linked ? `<div class="notice warn">لم تربطك إدارة المدرسة بجدولك بعد. سيظهر جدولك هنا بعد الربط.</div>` : ""}
   ${linked && !my.length ? `<div class="notice warn">لم يتم توزيع جدولك بعد. تابع لاحقًا.</div>` : ""}
 
@@ -117,11 +164,14 @@ function render() {
       ${S.acc.phone ? `<div><span>رقم الهاتف</span><b dir="ltr" data-no-i18n>${esc(S.acc.phone)}</b></div>` : ""}
       <div><span>المدرسة</span><b data-no-i18n>${esc(S.school.name || "")}</b></div>
     </div>
+    <div id="pushBox" style="margin-bottom:1rem"></div>
     <button class="btn" id="pwBtn"><span data-ic="key" data-size="18"></span>تغيير كلمة المرور</button>
     <p class="muted" style="font-size:.85rem;margin-bottom:0">سيصلك رابط على بريدك الإلكتروني لتعيين كلمة مرور جديدة.</p>
   </div>`;
   fillIcons($("view"));
   drawGrid();
+  drawPush($("pushBox"));
+  $("updOk") && ($("updOk").onclick = () => markRead(unreadTT()));
   $("dlBtn") && ($("dlBtn").onclick = async () => {
     const sh = mySheet();
     try { toast(tr("جارٍ تجهيز الملف")); await downloadSheetsPDF([sh], sh.title); }
@@ -137,12 +187,13 @@ function gridHTML(transpose) {
   const st = settings(), D = st.days.length, P = st.periods.length;
   const map = new Map(mine().map(x => [`${x.d}.${x.p}`, x]));
   const blk = blockedMap();
+  const fresh = new Set(unreadTT().flatMap(n => (n.added || []).map(x => `${x.d}.${x.p}`)));
   const cell = (d, p) => {
     const x = map.get(`${d}.${p}`);
     if (!x && blk.has(d * P + p)) return `<td class="tt-cell ro blk"><div class="blk-l">🔒 ${esc(blk.get(d * P + p))}</div></td>`;
     if (!x) return `<td class="tt-cell ro"></td>`;
     const sb = subject(x.s);
-    return `<td class="tt-cell has ro"><div class="lsn" style="--c:${sb?.color || "#64748b"}"><b>${esc(secLabel(section(x.c)))}</b><small>${esc(sb?.name || "")}</small></div></td>`;
+    return `<td class="tt-cell has ro ${fresh.has(`${d}.${p}`) ? "fresh" : ""}"><div class="lsn" style="--c:${sb?.color || "#64748b"}"><b>${esc(secLabel(section(x.c)))}</b><small>${esc(sb?.name || "")}</small></div></td>`;
   };
   const pHead = p => `<th class="ph"><b>${p + 1}</b><small>${esc(st.periods[p]?.start || "")}</small></th>`;
   if (!transpose) return `<table class="tt"><thead><tr><th></th>${Array.from({ length: P }, (_, p) => pHead(p)).join("")}</tr></thead><tbody>
