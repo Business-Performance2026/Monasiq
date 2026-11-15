@@ -1,9 +1,9 @@
 // لوحة المعلم: جدولي، حصص اليوم، حسابي
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611142006";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142006";
-import { buildRules } from "./rules.js?v=202611142006";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611142049";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142049";
+import { buildRules } from "./rules.js?v=202611142049";
 import { collection, doc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142006";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142049";
 
 applyBranding();
 const $ = id => document.getElementById(id);

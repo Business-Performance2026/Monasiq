@@ -6,11 +6,11 @@
   <title>مُنسِّق | منصة توزيع جدول الحصص للمدارس</title>
   <meta name="description" content="منصة سحابية لتوزيع جدول الحصص على المعلمين والشعب بسهولة، تعمل على الكمبيوتر والجوال.">
   <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
-  <link rel="stylesheet" href="assets/style.css?v=202611142006">
-  <link rel="manifest" href="manifest.webmanifest?v=202611142006">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611142006">
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611142006">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611142006">
+  <link rel="stylesheet" href="assets/style.css?v=202611142049">
+  <link rel="manifest" href="manifest.webmanifest?v=202611142049">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611142049">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611142049">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611142049">
   <meta name="theme-color" content="#012950">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,7 +21,7 @@
 
 <header class="nav">
   <div class="container">
-    <a href="index.html" class="logo"><img class="logo-mark" src="assets/img/icon-96.png?v=202611142006" alt=""><span data-app-name>مُنسِّق</span></a>
+    <a href="index.html" class="logo"><img class="logo-mark" src="assets/img/icon-96.png?v=202611142049" alt=""><span data-app-name>مُنسِّق</span></a>
     <nav class="nav-links">
       <a href="#about">عن المنصة</a>
       <a href="#features">المميزات</a>
@@ -38,7 +38,7 @@
 <section class="hero" id="about">
   <div class="container">
     <div>
-      <img class="brand-logo" src="assets/img/logo.png?v=202611142006" alt="مُنسِّق">
+      <img class="brand-logo" src="assets/img/logo.png?v=202611142049" alt="مُنسِّق">
       <span class="badge info">لإدارات المدارس</span>
       <h1>وزّع جدول الحصص<br><span>بدقائق بدل أيام</span></h1>
       <p class="lead"><b data-app-name>مُنسِّق</b> منصة سحابية تساعد إدارة المدرسة على إدخال المعلمين والصفوف والشعب والمواد، ثم توزيع الحصص على أيام الأسبوع بدون تعارض، وتحميل جدول كل معلم وكل شعبة PDF. تعمل من الكمبيوتر والجوال.</p>
@@ -124,8 +124,8 @@
 </footer>
 
 <script type="module">
-  import { APP } from "./assets/config.js?v=202611142006";
-  import { initI18n, isEn, tr } from "./assets/i18n.js?v=202611142006";
+  import { APP } from "./assets/config.js?v=202611142049";
+  import { initI18n, isEn, tr } from "./assets/i18n.js?v=202611142049";
   const name = isEn ? (APP.nameEn || APP.name) : APP.name;
   const tag = isEn ? (APP.taglineEn || APP.tagline) : APP.tagline;
   document.querySelectorAll("[data-app-name]").forEach(e => { e.textContent = name; e.setAttribute("data-no-i18n", ""); });

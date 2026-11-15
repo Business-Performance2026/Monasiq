@@ -1,14 +1,14 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142006";
-import { setLang } from "./i18n.js?v=202611142006";
-import { schedule, reconcile } from "./scheduler.js?v=202611142006";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142006";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142006";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142006";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142006";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142006";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142006";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142006";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142049";
+import { setLang } from "./i18n.js?v=202611142049";
+import { schedule, reconcile } from "./scheduler.js?v=202611142049";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142049";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142049";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142049";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142049";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142049";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142049";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142049";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -348,7 +348,7 @@ function chgLabel(k) {
 function updatePubBar() {
   const bar = $("pubBar"); if (!bar) return;
   const ch = ttChanges();
-  bar.innerHTML = ch.size ? `<div class="pub-bar"><span data-ic="bell" data-size="18"></span><span>${esc(tf("تغيّرت جداول {0} معلمين منذ آخر إرسال", ch.size))}</span>
+  bar.innerHTML = ch.size ? `<div class="pub-bar"><span data-ic="bell" data-size="18"></span><span>${esc(ch.size === 1 ? tf("تغيّر جدول {0} منذ آخر إرسال", teacherOf([...ch.keys()][0])?.name || "") : tf("تغيّرت جداول {0} معلمين منذ آخر إرسال", ch.size))}</span>
     <button class="btn sm primary" id="pubBtn">${tr("إرسال التحديث للمعلمين")}</button></div>` : "";
   fillIcons(bar);
   if ($("pubBtn")) $("pubBtn").onclick = publishModal;
