@@ -1,15 +1,15 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142213";
-import { setLang } from "./i18n.js?v=202611142213";
-import { schedule, reconcile } from "./scheduler.js?v=202611142213";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142213";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142213";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142213";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142213";
-import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611142213";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142213";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142213";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142213";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142225";
+import { setLang } from "./i18n.js?v=202611142225";
+import { schedule, reconcile } from "./scheduler.js?v=202611142225";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142225";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142225";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142225";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142225";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611142225";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142225";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142225";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142225";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";

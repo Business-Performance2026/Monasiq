@@ -879,3 +879,7 @@ button.sugg-i { cursor: pointer; } button.sugg-i:hover, button.sugg-i:focus-visi
 .picked { display: flex; align-items: center; justify-content: space-between; gap: .6rem; border: 1.5px solid var(--primary-2); background: var(--primary-soft); border-radius: 12px; padding: .6rem .8rem; }
 .picked > div { display: flex; flex-direction: column; } .picked small { font-size: .8rem; color: var(--muted); }
 select:disabled { opacity: .6; }
+.sugg-i.hit { background: var(--gold-soft); border: 1.5px solid #f3cf7a; margin-bottom: .15rem; }
+.sugg-i.hit:hover, .sugg-i.hit:focus-visible { background: #fbe9b7; border-color: var(--gold); }
+.sugg-i mark { background: #fcd34d; color: inherit; border-radius: 4px; padding: 0 .15em; }
+.sugg-i.hit::after { content: attr(data-pick); }

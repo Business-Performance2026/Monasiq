@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>التسجيل | {app}</title>
   <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
-  <link rel="stylesheet" href="assets/style.css?v=202611142213">
-  <link rel="manifest" href="manifest.webmanifest?v=202611142213">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611142213">
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611142213">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611142213">
+  <link rel="stylesheet" href="assets/style.css?v=202611142225">
+  <link rel="manifest" href="manifest.webmanifest?v=202611142225">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611142225">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611142225">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611142225">
   <meta name="theme-color" content="#012950">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,7 +20,7 @@
 <button class="lang-btn auth-lang" data-lang-toggle></button>
 <div class="auth-page">
   <div class="auth-box">
-    <a href="index.html" class="auth-brand"><img class="auth-logo" src="assets/img/logo.png?v=202611142213" alt="مُنسِّق"></a>
+    <a href="index.html" class="auth-brand"><img class="auth-logo" src="assets/img/logo.png?v=202611142225" alt="مُنسِّق"></a>
 
     <div class="card" id="formCard">
       <div class="seg wide" id="typeSeg">
@@ -103,8 +103,8 @@
 </div>
 
 <script type="module">
-  import { auth, db, applyBranding, errMsg, configured, defaultPeriods, t, waitUser, norm } from "./assets/app.js?v=202611142213";
-  import { govOptions, wilOptions, linkGovWil } from "./assets/oman.js?v=202611142213";
+  import { auth, db, applyBranding, errMsg, configured, defaultPeriods, t, waitUser, norm } from "./assets/app.js?v=202611142225";
+  import { govOptions, wilOptions, linkGovWil } from "./assets/oman.js?v=202611142225";
   import { createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { doc, setDoc, getDocs, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   applyBranding();
@@ -138,6 +138,11 @@
     }).catch(() => { schoolsP = null; throw new Error("load"); });
   }
   const place = s => [s.wilayah, s.region].filter(Boolean).join(" — ");
+  // تظليل الكلمات المطابقة للبحث داخل اسم المدرسة
+  const hl = (name, q) => {
+    const ws = norm(q).split(" ").filter(Boolean);
+    return String(name).split(/(\s+)/).map(part => ws.length && /\S/.test(part) && ws.some(w => norm(part).includes(w) || w.includes(norm(part))) ? `<mark>${escapeHtml(part)}</mark>` : escapeHtml(part)).join("");
+  };
   const anyWord = (q, s) => { const w = norm(q).split(" ").filter(Boolean); const h = norm(s.name + " " + (s.region || "") + " " + (s.wilayah || "")); return w.every(x => h.includes(x)); };
 
   // ---------- تسجيل مدرسة ----------
@@ -153,11 +158,21 @@
     dup.classList.toggle("hidden", !same || !q);
     if (same) dup.textContent = t("«{0}» مسجلة مسبقًا في المنصة ({1}). إذا كانت مدرستك، تواصل مع مسؤول الجدول فيها أو مع إدارة المنصة بدل التسجيل من جديد.", same.name, place(same));
     const hits = q.length < 2 ? [] : schools.filter(s => anyWord(q, s) && s !== same).slice(0, 6);
-    box.innerHTML = hits.length ? `<small class="muted">${t("مدارس مسجلة بأسماء مشابهة:")}</small>` + hits.map(s => `<div class="sugg-i"><b>${escapeHtml(s.name)}</b><small>${escapeHtml(place(s))}</small></div>`).join("") : "";
+    box.innerHTML = hits.length ? `<small class="muted">${t("مدارس مسجلة بأسماء مشابهة — اضغط إذا كانت مدرستك:")}</small>` + hits.map(s => `<button type="button" class="sugg-i hit" data-rid="${s.id}"><b>${hl(s.name, q)}</b><small>${escapeHtml(place(s))}</small></button>`).join("") : "";
     box.classList.toggle("hidden", !hits.length);
   };
   $("regName").addEventListener("focus", () => fetchSchools().then(regCheck).catch(() => {}), { once: true });
-  ["input", "change"].forEach(ev => { $("regName").addEventListener(ev, regCheck); $("regWil").addEventListener(ev, regCheck); });
+  // اختيار مدرسة مسجلة من الاقتراحات: نعبّئ بياناتها ونظهر التنبيه
+  $("regSugg").addEventListener("click", e => {
+    const b = e.target.closest("[data-rid]"); if (!b) return;
+    const s = schools.find(x => x.id === b.dataset.rid); if (!s) return;
+    if (s.region) { $("regGov").value = s.region; $("regGov").dispatchEvent(new Event("change")); }
+    if (s.wilayah) $("regWil").value = s.wilayah;
+    $("regName").value = s.name; regCheck();
+    $("regDup").scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+  $("regName").addEventListener("input", regCheck);
+  ["change", "input"].forEach(ev => $("regWil").addEventListener(ev, regCheck));
   f.addEventListener("submit", async e => {
     e.preventDefault();
     err.textContent = "";
@@ -200,7 +215,7 @@
     const q = $("tSchoolQ").value.trim(), gov = $("tGov").value, wil = $("tWil").value, box = $("tSugg");
     if (!schools.length) { box.innerHTML = `<div class="muted sugg-e">${t("لا توجد مدارس مفعّلة بعد")}</div>`; return; }
     const list = schools.filter(s => (!gov || s.region === gov) && (!wil || s.wilayah === wil) && (!q || anyWord(q, s)));
-    box.innerHTML = list.length ? list.slice(0, 50).map(s => `<button type="button" class="sugg-i" data-id="${s.id}"><b>${escapeHtml(s.name)}</b><small>${escapeHtml(place(s))}</small></button>`).join("")
+    box.innerHTML = list.length ? list.slice(0, 50).map(s => `<button type="button" class="sugg-i ${q ? "hit" : ""}" data-id="${s.id}"><b>${q ? hl(s.name, q) : escapeHtml(s.name)}</b><small>${escapeHtml(place(s))}</small></button>`).join("")
       + (list.length > 50 ? `<div class="muted sugg-e">${t("اكتب أكثر لتضييق البحث")}</div>` : "")
       : `<div class="muted sugg-e">${t("لا توجد نتائج. تأكد أن مدرستك مشتركة في المنصة.")}</div>`;
   }
