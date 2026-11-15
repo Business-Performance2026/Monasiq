@@ -1,15 +1,16 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142225";
-import { setLang } from "./i18n.js?v=202611142225";
-import { schedule, reconcile } from "./scheduler.js?v=202611142225";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142225";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142225";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142225";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142225";
-import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611142225";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142225";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142225";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142225";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611150651";
+import { setLang } from "./i18n.js?v=202611150651";
+import { schedule, reconcile } from "./scheduler.js?v=202611150651";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611150651";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611150651";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611150651";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611150651";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611150651";
+import { parseAscXml } from "./xml-import.js?v=202611150651";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611150651";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611150651";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611150651";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -893,10 +894,10 @@ function vSettings() {
       <button class="btn primary">💾 حفظ بيانات المدرسة</button>
     </form>
   </div>
-  <div class="card" data-fold="import" data-sum="${esc(tr("Excel أو PDF"))}">
+  <div class="card" data-fold="import" data-sum="${esc(tr("Excel أو PDF أو XML"))}">
     <h3>استيراد البيانات</h3>
-    <p class="muted" style="margin-top:0">استورد المعلمين والصفوف والشعب والمواد دفعة واحدة من ملف Excel (سطر لكل معلم ومادة وشعبة) أو من ملف PDF لجداول المعلمين (مثل جداول aSc).</p>
-    <div class="field"><label>ملف Excel أو PDF</label><input type="file" id="impFile" accept=".xlsx,.xls,.csv,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></div>
+    <p class="muted" style="margin-top:0">استورد المعلمين والصفوف والشعب والمواد دفعة واحدة من ملف Excel (سطر لكل معلم ومادة وشعبة)، أو من ملف PDF لجداول المعلمين، أو من ملف XML المُصدَّر من برنامج aSc (ينقل الجدول كاملًا كما هو).</p>
+    <div class="field"><label>ملف Excel أو PDF أو XML</label><input type="file" id="impFile" accept=".xlsx,.xls,.csv,.pdf,.xml,text/xml,application/xml,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></div>
     <p class="muted imp-hint">ملف Excel: الأعمدة هي المعلم، المادة، الشعبة (مثل 5/12)، عدد الحصص، ورقم الجوال والنصاب اختياريًا. <a href="#" id="xlsTpl">تحميل نموذج Excel</a></p>
     <label class="check" style="margin-bottom:1rem"><input type="checkbox" id="impReplace" checked> حذف البيانات الحالية قبل الاستيراد</label>
     <div class="row-actions">
@@ -1035,7 +1036,13 @@ BIND.settings = v => {
       if (r.error) return toast("لا توجد بيانات صالحة في الملف", "error");
       data = r.data; warnings = r.warnings;
       extra = tf("تمت قراءة {0} سطر من ورقة «{1}». بعد الاستيراد اضغط «توزيع تلقائي» في صفحة الجدول.", r.stats.rows, r.stats.sheet);
-    } else return toast("اختر ملف Excel أو PDF", "error");
+    } else if (/\.xml$/i.test(f.name)) {
+      let r;
+      try { toast(tr("جارٍ قراءة الملف")); r = await parseAscXml(f, settings()); } catch (ex) { console.error(ex); return toast(tr("تعذّر قراءة ملف XML"), "error"); }
+      if (r.error) return toast(tr(r.error === "empty" ? "لا توجد حصص في الملف" : "هذا ليس ملف XML من برنامج aSc Timetables"), "error");
+      data = r.data; warnings = r.warnings;
+      extra = tf("ملف aSc: {0} حصة موزعة في {1} شعبة، و{2} معلم. سيُنقل الجدول كما هو.", r.stats.lessons, r.stats.sections, r.stats.teachers);
+    } else return toast("اختر ملف Excel أو PDF أو XML", "error");
     const ok = await importPreview(data, warnings, extra, replace);
     if (ok) await importData(data, replace);
   };
@@ -1115,7 +1122,10 @@ async function importData(data, replace) {
     (data.teachers || []).forEach(x => mk("teachers", x.key));
     const G = k => id["grades:" + k], C = k => id["sections:" + k], SB = k => id["subjects:" + k], T = k => id["teachers:" + k];
     for (const g of data.grades || []) ops.push(b => b.set(doc(db, "schools", SID, "grades", G(g.key)), { name: g.name, code: String(g.code), createdAt: serverTimestamp() }));
-    for (const x of data.sections || []) ops.push(b => b.set(doc(db, "schools", SID, "sections", C(x.key)), { gradeId: G(x.grade), num: String(x.num) }));
+    for (const x of data.sections || []) {
+      const rules = x.rules ? { free: x.rules.free || [], days: (x.rules.days || []).filter(o => T(o.t)).map(o => ({ d: o.d, t: T(o.t), rest: o.rest || "free" })) } : null;
+      ops.push(b => b.set(doc(db, "schools", SID, "sections", C(x.key)), { gradeId: G(x.grade), num: String(x.num), ...(rules && (rules.free.length || rules.days.length) ? { rules } : {}) }));
+    }
     for (const x of data.subjects || []) {
       const periods = {}; for (const [gk, n] of Object.entries(x.periods || {})) if (G(gk)) periods[G(gk)] = num(n);
       ops.push(b => b.set(doc(db, "schools", SID, "subjects", SB(x.key)), { name: x.name, color: x.color || "#0f766e", periods, createdAt: serverTimestamp() }));
@@ -1131,6 +1141,8 @@ async function importData(data, replace) {
         .map(x => ({ t: T(x.teacher), s: SB(x.subject), c: C(x.section), d: x.d ?? null, p: x.p ?? null, l: !!x.l }));
       TT.dirty = false; TT.saving = true;
       await setDoc(doc(db, "schools", SID, "timetable", "main"), { lessons, updatedAt: serverTimestamp() });
+      // الجدول المستورد يُعتبر آخر نسخة مُرسلة للمعلمين
+      await setDoc(doc(db, "schools", SID, "timetable", "published"), { lessons: lessons.filter(x => x.d != null).map(x => ({ t: x.t, s: x.s, c: x.c, d: x.d, p: x.p })), at: Date.now() }).catch(() => {});
       TT.saving = false; TT.saved = lessons; TT.lessons = null;
     }
     step(100, "تم");
