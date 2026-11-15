@@ -1,0 +1,24 @@
+name: Diagnose notifications
+on:
+  workflow_dispatch:
+    inputs:
+      test_push:
+        description: "Send a test notification to admin devices (1/0)"
+        default: "1"
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: google-github-actions/auth@v2
+        with: { credentials_json: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" }
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: npm ci --prefix functions
+      - run: node tools/diagnose.js
+        env: { TEST_PUSH: "${{ inputs.test_push }}" }
+      - name: Function logs (last 2h)
+        run: |
+          gcloud logging read 'resource.type="cloud_run_revision" AND (resource.labels.service_name="onpaymentcreated" OR resource.labels.service_name="onschoolnotification" OR resource.labels.service_name="onschoolcreated")' \
+            --project monasiq --freshness=2h --limit=40 --format='value(timestamp,resource.labels.service_name,severity,textPayload,jsonPayload.message,jsonPayload.sent,jsonPayload.failed)' || true
