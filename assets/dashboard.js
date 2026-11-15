@@ -1,16 +1,16 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611150651";
-import { setLang } from "./i18n.js?v=202611150651";
-import { schedule, reconcile } from "./scheduler.js?v=202611150651";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611150651";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611150651";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611150651";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611150651";
-import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611150651";
-import { parseAscXml } from "./xml-import.js?v=202611150651";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611150651";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611150651";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611150651";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611150714";
+import { setLang } from "./i18n.js?v=202611150714";
+import { schedule, reconcile } from "./scheduler.js?v=202611150714";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611150714";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611150714";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611150714";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611150714";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611150714";
+import { parseAscXml } from "./xml-import.js?v=202611150714";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611150714";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611150714";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611150714";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -897,7 +897,7 @@ function vSettings() {
   <div class="card" data-fold="import" data-sum="${esc(tr("Excel أو PDF أو XML"))}">
     <h3>استيراد البيانات</h3>
     <p class="muted" style="margin-top:0">استورد المعلمين والصفوف والشعب والمواد دفعة واحدة من ملف Excel (سطر لكل معلم ومادة وشعبة)، أو من ملف PDF لجداول المعلمين، أو من ملف XML المُصدَّر من برنامج aSc (ينقل الجدول كاملًا كما هو).</p>
-    <div class="field"><label>ملف Excel أو PDF أو XML</label><input type="file" id="impFile" accept=".xlsx,.xls,.csv,.pdf,.xml,text/xml,application/xml,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></div>
+    <div class="field"><label>ملف Excel أو PDF أو XML</label><input type="file" id="impFile" accept=".xlsx,.xls,.csv,.pdf,.xml,text/xml,application/xml,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"><div class="imp-picked hidden" id="impPicked"></div></div>
     <p class="muted imp-hint">ملف Excel: الأعمدة هي المعلم، المادة، الشعبة (مثل 5/12)، عدد الحصص، ورقم الجوال والنصاب اختياريًا. <a href="#" id="xlsTpl">تحميل نموذج Excel</a></p>
     <label class="check" style="margin-bottom:1rem"><input type="checkbox" id="impReplace" checked> حذف البيانات الحالية قبل الاستيراد</label>
     <div class="row-actions">
@@ -1012,8 +1012,11 @@ BIND.settings = v => {
     } catch (e) { toast(errMsg(e), "error"); }
   };
   fillIcons(v);
+  // الملف المختار يُحفظ هنا، لأن الصفحة قد تُعاد رسمها (تحديث بيانات) بعد اختيار الملف فيُفقد من الحقل
+  $("impFile").onchange = e => { IMP_FILE = e.target.files[0] || null; showImpFile(); };
+  showImpFile();
   $("impBtn").onclick = async () => {
-    const f = $("impFile").files[0];
+    const f = $("impFile").files[0] || IMP_FILE;
     if (!f) return toast("اختر ملف البيانات أولًا", "error");
     const replace = $("impReplace").checked;
     let data, warnings = [], extra = "";
@@ -1427,6 +1430,13 @@ BIND.subjects = v => {
 //  المعلمون
 // =====================================================
 let tQuery = "";
+let IMP_FILE = null;
+function showImpFile() {
+  const box = $("impPicked"); if (!box) return;
+  box.innerHTML = IMP_FILE ? `📎 <b data-no-i18n>${esc(IMP_FILE.name)}</b> <span class="muted">(${Math.max(1, Math.round(IMP_FILE.size / 1024))} KB)</span> <button type="button" class="btn sm ghost" id="impClear">×</button>` : "";
+  box.classList.toggle("hidden", !IMP_FILE);
+  if ($("impClear")) $("impClear").onclick = () => { IMP_FILE = null; $("impFile").value = ""; showImpFile(); };
+}
 let TT_ENTS = [];
 let tDept = "all";
 // الأقسام المفتوحة في صفحة المعلمين (تُحفظ في المتصفح)
