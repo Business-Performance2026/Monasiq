@@ -899,3 +899,5 @@ select:disabled { opacity: .6; }
   .page-title .row-actions .half-tog { order: 3; width: 100%; justify-content: center; }
   .page-title .row-actions .btn.primary { order: 2; }
 }
+.clr-opt { display: flex; gap: .5rem; align-items: center; padding: .55rem .2rem; }
+.clr-opt input:disabled + * , .clr-opt:has(input:disabled) { opacity: .5; }

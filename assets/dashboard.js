@@ -1,17 +1,17 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611151354";
-import { setLang } from "./i18n.js?v=202611151354";
-import { schedule, reconcile } from "./scheduler.js?v=202611151354";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611151354";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611151354";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611151354";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611151354";
-import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611151354";
-import { parseAscXml } from "./xml-import.js?v=202611151354";
-import { gzipText, gunzipText, buildNoorXml } from "./noor-export.js?v=202611151354";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611151354";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611151354";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611151354";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611151431";
+import { setLang } from "./i18n.js?v=202611151431";
+import { schedule, reconcile } from "./scheduler.js?v=202611151431";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611151431";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611151431";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611151431";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611151431";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611151431";
+import { parseAscXml } from "./xml-import.js?v=202611151431";
+import { gzipText, gunzipText, buildNoorXml } from "./noor-export.js?v=202611151431";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611151431";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611151431";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611151431";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where, getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -2090,6 +2090,7 @@ function vTimetable() {
   <div class="page-title"><h1>توزيع الجدول</h1>
     <div class="row-actions">
       <span id="ttSave" class="save-state ok">محفوظ</span>
+      <button class="btn" id="ttClear" title="${tr("مسح الجدول")}"><span data-ic="trash" data-size="18"></span>${tr("مسح الجدول")}</button>
       <button class="btn" id="ttPrint"><span data-ic="download" data-size="18"></span>تحميل PDF</button>
       <label class="half-tog" title="${tr("حصص كل معلم في الأسبوع: نصفها في الحصص الأولى ونصفها في الحصص الأخيرة")}"><input type="checkbox" id="ttHalf" ${settings().halfBalance ? "checked" : ""}><span class="sw"></span><span>${tf("توزيع منصف (1–{0} / {1}–{2})", Math.ceil(ttDims().P / 2), Math.ceil(ttDims().P / 2) + 1, ttDims().P)}</span></label>
       <button class="btn primary" id="ttGen"><span data-ic="magic" data-size="18"></span>توزيع تلقائي</button>
@@ -2259,6 +2260,7 @@ BIND.timetable = v => {
   $("ttPrev").onclick = () => step(-1);
   $("ttNext").onclick = () => step(1);
   $("ttGen").onclick = ttGenerate;
+  $("ttClear").onclick = ttClearModal;
   $("ttHalf").onchange = async e => {
     const on = e.target.checked;
     try {
@@ -2345,6 +2347,24 @@ async function ttGenerate() {
   else toast(tf("تم توزيع {0} حصة بدون تعارض ✅", r.lessons.length), "success");
   if (r.balance?.length) setTimeout(() => balanceReport(r.balance, r.H, P), 600);
   if (r.lockedDropped) setTimeout(() => toast(tf("{0} حصة مثبتة كانت في وقت اجتماع أو حصة فارغة فأُعيد توزيعها", r.lockedDropped)), 3500);
+}
+function ttClearModal() {
+  const placed = TT.lessons.filter(x => x.d != null), locked = placed.filter(x => x.l).length;
+  if (!placed.length) return toast(tr("الجدول فارغ بالفعل"));
+  openModal(`${modalHead(tr("مسح الجدول"))}
+    <p style="margin-top:0">${tf("في الجدول الآن {0} حصة موزّعة، منها {1} مثبتة 🔒.", placed.length, locked)}</p>
+    <label class="check clr-opt"><input type="radio" name="clr" value="unlocked" ${locked ? "checked" : "disabled"}> ${tr("مسح الحصص غير المثبتة فقط (تبقى المثبتة في مكانها)")}</label>
+    <label class="check clr-opt"><input type="radio" name="clr" value="all" ${locked ? "" : "checked"}> ${tr("مسح كل الحصص حتى المثبتة")}</label>
+    <div class="notice warn" style="margin-top:.8rem">${tr("المعلمون والشعب والمواد وأنصبة الحصص لا تُحذف — فقط تفرغ الجداول وترجع الحصص إلى قائمة «غير الموزّعة»، وتقدر توزّعها من جديد بالتوزيع التلقائي.")}</div>
+    <div class="modal-actions"><button class="btn danger" id="clrGo"><span data-ic="trash" data-size="18"></span>${tr("مسح")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+  fillIcons($("modal"));
+  $("clrGo").onclick = () => {
+    const all = document.querySelector("input[name=clr]:checked")?.value === "all";
+    let n = 0;
+    TT.lessons = TT.lessons.map(x => { if (x.d == null || (x.l && !all)) return x; n++; return { ...x, d: null, p: null, l: false }; });
+    TV.sel = null; ttMark(); closeModal(); render();
+    toast(tf("تم مسح {0} حصة من الجدول", n), "success");
+  };
 }
 function balanceReport(list, H, P) {
   list.sort((a, b) => Math.abs(b.early - b.late) - Math.abs(a.early - a.late));
