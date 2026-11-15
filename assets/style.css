@@ -901,3 +901,9 @@ select:disabled { opacity: .6; }
 }
 .clr-opt { display: flex; gap: .5rem; align-items: center; padding: .55rem .2rem; }
 .clr-opt input:disabled + * , .clr-opt:has(input:disabled) { opacity: .5; }
+.wipe-box { margin-top: 1.2rem; padding-top: 1rem; border-top: 1px dashed var(--line); display: flex; gap: .8rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.wipe-box p { margin: .2rem 0 0; font-size: .85rem; }
+.imp-stats:has(> div) { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: .5rem; }
+.imp-stats > div { display: flex; flex-direction: column; align-items: center; padding: .55rem .3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-soft, #f5f7fb); }
+.imp-stats > div b { font-size: 1.3rem; color: var(--brand, #012950); line-height: 1.2; }
+.imp-stats > div span { font-size: .78rem; color: var(--muted, #667); }
