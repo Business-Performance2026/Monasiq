@@ -1,0 +1,16 @@
+rules_version = '2';
+// قواعد التخزين: وصولات التحويل — المدرسة ترفع وصلها فقط، والإدارة تفتحه عبر رابط الملف المحفوظ في الطلب
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /receipts/{schoolId}/{file} {
+      allow read: if request.auth != null && request.auth.uid == schoolId;
+      allow create: if request.auth != null && request.auth.uid == schoolId
+        && request.resource.size < 10 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+      allow delete: if request.auth != null && request.auth.uid == schoolId;
+    }
+    match /{all=**} {
+      allow read, write: if false;
+    }
+  }
+}

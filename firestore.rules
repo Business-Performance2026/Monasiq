@@ -79,6 +79,15 @@ service cloud.firestore {
       }
     }
 
+    // أجهزة إشعارات الجوال: كل مستخدم يسجّل أجهزته فقط (السيرفر يرسل الإشعارات)
+    match /pushTokens/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role in ['admin', 'school']
+        && (request.resource.data.role != 'admin' || isAdmin())
+        && (request.resource.data.role != 'school' || request.resource.data.schoolId == request.auth.uid);
+    }
+
     // إعدادات الاشتراك (السعر، رقم التحويل...) — يقرؤها أي مستخدم مسجّل، ويعدّلها المدير
     match /config/{id} {
       allow read: if signedIn();

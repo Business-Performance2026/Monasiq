@@ -1,0 +1,77 @@
+# نشر وظائف السيرفر (إشعارات الجوال والتذكيرات) وقواعد Firestore والتخزين إلى Firebase
+# يحتاج سرًّا واحدًا في المستودع: FIREBASE_SERVICE_ACCOUNT (ملف JSON لحساب خدمة)
+name: Deploy Firebase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "functions/**"
+      - "firestore.rules"
+      - "storage.rules"
+      - "firebase.json"
+      - ".github/workflows/firebase-deploy.yml"
+  workflow_dispatch:
+
+concurrency: firebase-deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secret
+        id: chk
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            echo "::warning::FIREBASE_SERVICE_ACCOUNT secret is missing — add it in Settings > Secrets and variables > Actions, then re-run."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.chk.outputs.skip != '1'
+        with:
+          node-version: 20
+
+      - uses: google-github-actions/auth@v2
+        if: steps.chk.outputs.skip != '1'
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.chk.outputs.skip != '1'
+
+      - name: Enable required APIs
+        if: steps.chk.outputs.skip != '1'
+        run: |
+          gcloud services enable cloudfunctions.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
+            run.googleapis.com eventarc.googleapis.com pubsub.googleapis.com cloudscheduler.googleapis.com \
+            firebaseextensions.googleapis.com fcm.googleapis.com firebasestorage.googleapis.com --project monasiq || true
+
+      - name: Pick functions region from the Firestore location
+        if: steps.chk.outputs.skip != '1'
+        run: |
+          LOC=$(gcloud firestore databases describe --database='(default)' --project monasiq --format='value(locationId)' 2>/dev/null || echo nam5)
+          case "$LOC" in
+            nam5|nam7|"") R=us-central1 ;;
+            eur3) R=europe-west1 ;;
+            *) R="$LOC" ;;
+          esac
+          echo "Firestore: $LOC -> functions: $R"
+          echo "FN_REGION=$R" > functions/.env
+
+      - name: Install functions
+        if: steps.chk.outputs.skip != '1'
+        run: npm ci --prefix functions
+
+      - name: Deploy rules and functions
+        if: steps.chk.outputs.skip != '1'
+        run: npx -y firebase-tools@13 deploy --only firestore:rules,functions --project monasiq --non-interactive --force
+
+      - name: Deploy storage rules
+        if: steps.chk.outputs.skip != '1'
+        continue-on-error: true
+        run: npx -y firebase-tools@13 deploy --only storage --project monasiq --non-interactive

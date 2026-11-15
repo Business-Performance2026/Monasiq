@@ -1,13 +1,14 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141840";
-import { setLang } from "./i18n.js?v=202611141840";
-import { schedule, reconcile } from "./scheduler.js?v=202611141840";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611141840";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141840";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141840";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141840";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141840";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141840";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141906";
+import { setLang } from "./i18n.js?v=202611141906";
+import { schedule, reconcile } from "./scheduler.js?v=202611141906";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611141906";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141906";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141906";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141906";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141906";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141906";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611141906";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -88,6 +89,7 @@ function init(user) {
     updateBell();
   }, () => {});
   document.querySelectorAll("[data-bell]").forEach(b => (b.onclick = openBell));
+  refreshPush({ uid: SID, role: "school", schoolId: SID });
   // وضع المشاهدة فقط بعد انتهاء الاشتراك: نمنع أزرار التعديل
   document.addEventListener("click", roGuard, true);
   document.addEventListener("submit", e => { if (isRO() && e.target.closest("#view, #modal") && !e.target.closest("#billView")) { e.preventDefault(); e.stopPropagation(); roToast(); } }, true);
@@ -142,7 +144,7 @@ const curSub = () => subState(S.school, B.cfg);
 const isRO = () => !!S.school && curSub().state === "expired";
 const pendingPay = () => B.pays.find(p => p.status === "pending");
 function roToast() { toast(tr("انتهى الاشتراك: يمكنك المشاهدة والتحميل فقط. جدّد من صفحة «اشتراكاتي»."), "error"); }
-const RO_ALLOW = "[data-pr],[data-act=wa],.wa-btn,.ld-head,.fold-head,.gh,#ttMode,#ttPrev,#ttNext,.tt-find,#ttPrint,#expPdfT,#expPdfS,[data-close],.x,.lang-btn,[data-bell],#billView,.ld-filters,#tFoldAll,.t-group-head,#xlsTpl,#dlCancel,.sub-banner";
+const RO_ALLOW = "[data-push],[data-pr],[data-act=wa],.wa-btn,.ld-head,.fold-head,.gh,#ttMode,#ttPrev,#ttNext,.tt-find,#ttPrint,#expPdfT,#expPdfS,[data-close],.x,.lang-btn,[data-bell],#billView,.ld-filters,#tFoldAll,.t-group-head,#xlsTpl,#dlCancel,.sub-banner";
 function roGuard(e) {
   if (!isRO()) return;
   const t = e.target;
@@ -184,7 +186,9 @@ function openBell() {
   openModal(`${modalHead(tr("الإشعارات"))}
     <div class="noti-list">${items.length ? items.map(x => `<a class="noti ${x.kind || "info"} ${x.read || x.alert ? "" : "new"}" href="#billing" data-close>
       <b>${esc(x.title)}</b>${x.body ? `<span>${esc(x.body)}</span>` : ""}${x.at ? `<small>${esc(new Date(x.at).toLocaleString(isEn ? "en-GB" : "ar-OM", { dateStyle: "medium", timeStyle: "short" }))}</small>` : ""}</a>`).join("")
-      : `<div class="empty">${tr("لا توجد إشعارات")}</div>`}</div>`);
+      : `<div class="empty">${tr("لا توجد إشعارات")}</div>`}</div>
+    <div id="pushBox2" style="margin-top:1rem"></div>`);
+  drawPush($("pushBox2"));
   const unread = B.notes.filter(x => !x.read);
   if (unread.length) {
     const b = writeBatch(db);
@@ -213,6 +217,7 @@ function vBilling() {
       <h3>${tr("طلبك قيد المراجعة")}</h3>
       <p class="muted">${esc(tf("أُرسل في {0} بمبلغ {1}. سيصلك إشعار هنا بمجرد التفعيل.", new Date(pend.createdAt).toLocaleDateString(isEn ? "en-GB" : "ar-OM"), money(pend.amount, cfg)))}</p>
       ${pend.receipt ? `<img class="rcpt-thumb" src="${pend.receipt}" alt="">` : ""}
+      ${pend.receiptUrl ? `<a href="${esc(pend.receiptUrl)}" target="_blank" rel="noopener">${tr("فتح الملف الأصلي")}</a>` : ""}
       <div class="row-actions">
         ${cfg.adminPhone ? `<button class="btn wa-notify" id="waAdmin">${WA_ICON}<span>${tr("إبلاغ الإدارة عبر واتساب")}</span></button>` : ""}
         <button class="btn ghost" id="payCancel">${tr("إلغاء الطلب")}</button>
@@ -235,6 +240,7 @@ function vBilling() {
       </ol>
       <button class="btn primary block" id="paySend"><span data-ic="upload" data-size="18"></span>${tr("إرسال الوصل")}</button>
     </div>`}
+  <div class="card"><h3>${tr("إشعارات الجوال")}</h3><div id="pushBox"></div></div>
   <div class="card">
     <h3>${tr("سجل الدفعات")}</h3>
     ${hist.length ? `<div class="pay-hist">${hist.map(p => `<div class="ph-row">
@@ -244,8 +250,15 @@ function vBilling() {
   </div></div>`;
 }
 const nextExpiryOf = cfg => quote({}, cfg).until;
+const pushCtx = () => ({ uid: SID, role: "school", schoolId: SID });
+async function drawPush(box) {
+  if (!box) return;
+  box.innerHTML = pushCardHTML(await pushState(), esc);
+  bindPushCard(box, pushCtx(), () => drawPush(box), toast);
+}
 BIND.billing = v => {
   fillIcons(v);
+  drawPush($("pushBox"));
   const cfg = B.cfg, pend = pendingPay();
   const waAdmin = p => {
     const n = waNumber(cfg.adminPhone); if (!n) return;
@@ -262,9 +275,9 @@ BIND.billing = v => {
   }
   if (!$("paySend")) return;
   if ($("copyPhone")) $("copyPhone").onclick = async () => { try { await navigator.clipboard.writeText(cfg.bankPhone); toast(tr("تم نسخ الرقم"), "success"); } catch { toast(cfg.bankPhone); } };
-  let rcpt = null;
+  let rcpt = null, rcptFile = null;
   $("rcptFile").onchange = async e => {
-    const f = e.target.files[0]; rcpt = null; $("rcptPrev").innerHTML = "";
+    const f = e.target.files[0]; rcpt = null; rcptFile = f || null; $("rcptPrev").innerHTML = "";
     if (!f) return;
     $("rcptPrev").innerHTML = `<div class="muted">${tr("جارٍ تجهيز الصورة")}…</div>`;
     try { rcpt = await receiptDataUrl(f); $("rcptPrev").innerHTML = `<img class="rcpt-thumb" src="${rcpt}" alt="">`; }
@@ -277,13 +290,20 @@ BIND.billing = v => {
     const p = { schoolId: SID, schoolName: S.school.name, email: S.school.email || "", amount: q.amount, until: q.until, months: q.months, renewal: q.renewal,
       receipt: rcpt, note: $("payNote").value.trim().slice(0, 500), status: "pending", createdAt: Date.now() };
     try {
-      await addDoc(collection(db, "payments"), p);
+      const pref = doc(collection(db, "payments"));
+      // الملف الأصلي في Storage + صورة مصغّرة للعرض. إذا لم يكن Storage متاحًا نكتفي بالصورة المضغوطة
+      try {
+        btn.textContent = tr("جارٍ رفع الوصل…");
+        const up = await uploadReceipt(rcptFile, SID, pref.id);
+        Object.assign(p, { receiptUrl: up.url, receiptPath: up.path, receiptType: up.type, receipt: await receiptDataUrl(rcptFile, true) });
+      } catch (ex) { console.warn("storage", ex); }
+      await setDoc(pref, p);
       openModal(`${modalHead(tr("تم إرسال الوصل ✅"))}
         <p>${esc(tr("سيتم مراجعة الوصل وتفعيل الاشتراك، وسيصلك إشعار هنا عند التفعيل."))}</p>
         ${cfg.adminPhone ? `<p class="muted">${tr("لتسريع المراجعة أبلغ الإدارة عبر واتساب:")}</p>` : ""}
         <div class="modal-actions">${cfg.adminPhone ? `<button class="btn wa-notify" id="waAdmin2">${WA_ICON}<span>${tr("إبلاغ الإدارة عبر واتساب")}</span></button>` : ""}<button class="btn ghost" data-close>${tr("إغلاق")}</button></div>`);
       if ($("waAdmin2")) $("waAdmin2").onclick = () => { waAdmin(p); closeModal(); };
-    } catch (e) { btn.disabled = false; toast(errMsg(e), "error"); }
+    } catch (e) { btn.disabled = false; btn.textContent = tr("إرسال الوصل"); toast(errMsg(e), "error"); }
   };
 };
 

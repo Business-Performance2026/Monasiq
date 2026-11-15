@@ -1,7 +1,8 @@
 // لوحة إدارة المنصة: المدارس، طلبات الاشتراك، إعدادات الاشتراك
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, tr, lang, isEn, fillIcons, sendReset, norm } from "./app.js?v=202611141840";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, tr, lang, isEn, fillIcons, sendReset, norm } from "./app.js?v=202611141906";
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, getDocs, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { watchBilling, subState, nextExpiry, fmtDate, money, stateLabel, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141840";
+import { watchBilling, subState, nextExpiry, fmtDate, money, stateLabel, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141906";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611141906";
 applyBranding();
 
 const $ = id => document.getElementById(id);
@@ -45,6 +46,15 @@ function start() {
   watchBilling(c => { cfg = c; render(); });
   window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
   document.querySelectorAll("[data-bell]").forEach(b => (b.onclick = () => { payFilter = "pending"; location.hash = "#payments"; render(); }));
+  const pushCtx = { uid: user.uid, role: "admin" };
+  refreshPush(pushCtx);
+  async function drawPush(box, onlyIfOff = false) {
+    if (!box) return;
+    const st = await pushState();
+    if (onlyIfOff && st === "on") { box.innerHTML = ""; return; }
+    box.innerHTML = pushCardHTML(st, esc);
+    bindPushCard(box, pushCtx, () => drawPush(box, onlyIfOff), toast);
+  }
 
   // قائمة المدارس المفعّلة التي يختار منها المعلم عند التسجيل
   async function syncPublic() {
@@ -77,6 +87,7 @@ function start() {
     else if (v === "billing") main.innerHTML = vBillingCfg();
     else main.innerHTML = vSchools();
     fillIcons(main);
+    drawPush($("pushBox"), v !== "billing");
     BIND[v]?.();
   }
 
@@ -210,6 +221,7 @@ function start() {
     const c = k => pays.filter(p => p.status === k).length;
     const stB = { pending: ["warn", "قيد المراجعة"], approved: ["ok", "مقبول"], rejected: ["bad", "مرفوض"] };
     return `<div class="page-title"><h1>${tr("طلبات الاشتراك")}</h1></div>
+      <div id="pushBox"></div>
       <div class="card">
         <div class="tabs adm-tabs" id="payF">
           ${[["pending", "قيد المراجعة"], ["approved", "المقبولة"], ["rejected", "المرفوضة"], ["all", "الكل"]].map(([k, l]) => `<button data-f="${k}" class="${payFilter === k ? "active" : ""}">${tr(l)} ${k !== "all" ? `(${c(k)})` : ""}</button>`).join("")}
@@ -226,6 +238,7 @@ function start() {
               ${p.email ? `<span>✉️ ${esc(p.email)}</span>` : ""}
             </div>
             ${p.note ? `<p class="muted" style="margin:.4rem 0 0">📝 ${esc(p.note)}</p>` : ""}
+            ${p.receiptUrl ? `<p style="margin:.4rem 0 0"><a href="${esc(p.receiptUrl)}" target="_blank" rel="noopener">📎 ${tr(p.receiptType === "pdf" ? "فتح ملف PDF الأصلي" : "فتح الصورة الأصلية")}</a></p>` : ""}
             ${p.status === "rejected" && p.reason ? `<p class="ph-reason" style="margin:.4rem 0 0">${esc(t("سبب الرفض: {0}", p.reason))}</p>` : ""}
           </div>
           <div class="row-actions">
@@ -239,7 +252,9 @@ function start() {
     $("payF").onclick = e => { const b = e.target.closest("button"); if (!b) return; payFilter = b.dataset.f; render(); };
     $("payList").onclick = async e => {
       const z = e.target.closest("[data-zoom]");
-      if (z) return openModal(`${modalHead(tr("وصل التحويل"))}<img class="rcpt-full" src="${z.src}" alt="">`);
+      if (z) { const pz = pays.find(x => x.id === z.closest("[data-id]").dataset.id);
+        if (pz?.receiptUrl && pz.receiptType === "pdf") return window.open(pz.receiptUrl, "_blank");
+        return openModal(`${modalHead(tr("وصل التحويل"))}<img class="rcpt-full" src="${esc(pz?.receiptUrl || z.src)}" alt="">`); }
       const b = e.target.closest("button[data-a]"); if (!b) return;
       const p = pays.find(x => x.id === b.closest("[data-id]").dataset.id), a = b.dataset.a;
       const s = schools.find(x => x.id === p.schoolId);
@@ -284,6 +299,7 @@ function start() {
   function vBillingCfg() {
     const months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
     return `<div class="page-title"><h1>${tr("إعدادات الاشتراك")}</h1></div>
+      <div class="card"><h3>${tr("إشعارات الجوال")}</h3><p class="muted" style="margin-top:0">${tr("يصلك إشعار عند وصول وصل تحويل أو تسجيل مدرسة جديدة، وتذكير يومي بالطلبات المعلّقة، حتى لو كانت المنصة مغلقة.")}</p><div id="pushBox"></div></div>
       <form class="card" id="cfgForm">
         <h3>${tr("السعر والمدة")}</h3>
         <div class="grid-2">

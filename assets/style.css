@@ -781,3 +781,10 @@ body.ro #view .tt-hint { display: none; }
 }
 .side nav a.active .nbadge, .adm-mtabs a.active .nbadge { background: var(--gold); color: var(--navy); }
 .adm-mtabs a { border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: .4em .8em; font-weight: 600; font-size: .9rem; display: inline-flex; align-items: center; justify-content: center; gap: .3rem; }
+.push-card { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .75rem .9rem; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+.push-card > div { display: flex; flex-direction: column; gap: .1rem; }
+.push-card small { color: var(--muted); font-size: .82rem; }
+.push-card.off, .push-card.info { background: var(--gold-soft); border-color: #f3dfa6; }
+.push-card.ok { background: #f0fdf4; border-color: #bbf7d0; }
+.push-card.bad { background: #fef2f2; border-color: #fecaca; } .push-card.warn { background: #fffbeb; border-color: #fde68a; }
+#pushBox:not(:empty) { margin-bottom: 1rem; } .card #pushBox:not(:empty) { margin-bottom: 0; }
