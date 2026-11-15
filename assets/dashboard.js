@@ -1,14 +1,14 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141906";
-import { setLang } from "./i18n.js?v=202611141906";
-import { schedule, reconcile } from "./scheduler.js?v=202611141906";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611141906";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141906";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141906";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141906";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141906";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141906";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611141906";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611141950";
+import { setLang } from "./i18n.js?v=202611141950";
+import { schedule, reconcile } from "./scheduler.js?v=202611141950";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611141950";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611141950";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611141950";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611141950";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611141950";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141950";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611141950";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -253,7 +253,7 @@ const nextExpiryOf = cfg => quote({}, cfg).until;
 const pushCtx = () => ({ uid: SID, role: "school", schoolId: SID });
 async function drawPush(box) {
   if (!box) return;
-  box.innerHTML = pushCardHTML(await pushState(), esc);
+  box.innerHTML = pushCardHTML(await pushState(SID), esc);
   bindPushCard(box, pushCtx(), () => drawPush(box), toast);
 }
 BIND.billing = v => {

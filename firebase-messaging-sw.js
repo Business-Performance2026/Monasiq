@@ -13,5 +13,12 @@ firebase.initializeApp({
 // الإشعار يُعرض تلقائيًا من بيانات الرسالة (العنوان، النص، الرابط)
 firebase.messaging();
 
+// فتح الصفحة المناسبة عند الضغط على إشعار عُرض والصفحة مفتوحة
+self.addEventListener("notificationclick", e => {
+  const link = e.notification?.data?.link;
+  if (!link) return;
+  e.notification.close();
+  e.waitUntil(clients.openWindow(link));
+});
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));

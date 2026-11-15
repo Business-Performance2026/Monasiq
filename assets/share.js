@@ -1,8 +1,8 @@
 // صفحة جدول المعلم العامة (من رابط واتساب) — بدون تسجيل دخول
-import { db, applyBranding, esc, toast, tr, t as tf, isEn, fillIcons } from "./app.js?v=202611141906";
+import { db, applyBranding, esc, toast, tr, t as tf, isEn, fillIcons } from "./app.js?v=202611141950";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { sheetHTML, downloadSheetsPDF } from "./print.js?v=202611141906";
-import { docToSheet } from "./whatsapp.js?v=202611141906";
+import { sheetHTML, downloadSheetsPDF } from "./print.js?v=202611141950";
+import { docToSheet } from "./whatsapp.js?v=202611141950";
 
 applyBranding();
 const $ = id => document.getElementById(id);

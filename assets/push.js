@@ -1,10 +1,11 @@
 // إشعارات الجوال (Firebase Cloud Messaging)
-import { app, db, tr } from "./app.js?v=202611141906";
-import { firebaseConfig } from "./config.js?v=202611141906";
+import { app, db, tr } from "./app.js?v=202611141950";
+import { firebaseConfig } from "./config.js?v=202611141950";
 import { doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const MSG = "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
-const KEY = "pushToken";
+let KEY = "pushToken";
+const keyFor = uid => (KEY = "pushToken_" + uid);
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 
@@ -18,7 +19,8 @@ async function supported() {
 }
 
 // on | off | denied | ios-install | unsupported
-export async function pushState() {
+export async function pushState(uid) {
+  if (uid) keyFor(uid);
   if (isIOS() && !standalone()) return "ios-install";
   if (!(await supported())) return "unsupported";
   if (Notification.permission === "denied") return "denied";
@@ -31,10 +33,21 @@ async function getTok() {
   await navigator.serviceWorker.ready;
   const opts = { serviceWorkerRegistration: reg };
   if (firebaseConfig.vapidKey) opts.vapidKey = firebaseConfig.vapidKey;
-  return getToken(getMessaging(app), opts);
+  const tok = await getToken(getMessaging(app), opts);
+  foreground(reg).catch(() => {});
+  return tok;
+}
+let fg = false;
+async function foreground(reg) {
+  if (fg) return; fg = true;
+  const { getMessaging, onMessage } = await import(MSG);
+  onMessage(getMessaging(app), m => {
+    const n = m.notification || {};
+    reg.showNotification(n.title || "مُنسِّق", { body: n.body || "", icon: "assets/img/icon-192.png", dir: "rtl", lang: "ar", data: { link: m.fcmOptions?.link } }).catch(() => {});
+  });
 }
 async function save(token, ctx) {
-  await setDoc(doc(db, "pushTokens", await hash(token)), {
+  await setDoc(doc(db, "pushTokens", await hash(ctx.uid + "|" + token)), {
     token, uid: ctx.uid, role: ctx.role, schoolId: ctx.schoolId || "", ua: navigator.userAgent.slice(0, 160), at: Date.now()
   });
   localStorage.setItem(KEY, token);
@@ -42,6 +55,7 @@ async function save(token, ctx) {
 
 // تفعيل الإشعارات على هذا الجهاز (يجب أن يكون بعد ضغطة زر)
 export async function enablePush(ctx) {
+  keyFor(ctx.uid);
   if (!(await supported())) throw new Error("unsupported");
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error("denied");
@@ -52,18 +66,19 @@ export async function enablePush(ctx) {
 }
 // تحديث الرمز بصمت عند كل فتح (الرموز تتغير أحيانًا)
 export async function refreshPush(ctx) {
+  keyFor(ctx.uid);
   try {
     if (!localStorage.getItem(KEY) || Notification.permission !== "granted" || !(await supported())) return;
     const old = localStorage.getItem(KEY), token = await getTok();
-    if (token && token !== old) { await deleteDoc(doc(db, "pushTokens", await hash(old))).catch(() => {}); await save(token, ctx); }
+    if (token && token !== old) { await deleteDoc(doc(db, "pushTokens", await hash(ctx.uid + "|" + old))).catch(() => {}); await save(token, ctx); }
     else if (token) await save(token, ctx);
   } catch {}
 }
-export async function disablePush() {
+export async function disablePush(ctx) {
   const old = localStorage.getItem(KEY);
   localStorage.removeItem(KEY);
   if (!old) return;
-  await deleteDoc(doc(db, "pushTokens", await hash(old))).catch(() => {});
+  await deleteDoc(doc(db, "pushTokens", await hash((ctx?.uid || "") + "|" + old))).catch(() => {});
   try { const { getMessaging, deleteToken } = await import(MSG); await deleteToken(getMessaging(app)); } catch {}
 }
 
@@ -87,7 +102,7 @@ export function bindPushCard(root, ctx, onChange, toast) {
     b.disabled = true;
     try {
       if (b.dataset.push === "on") { await enablePush(ctx); toast(tr("تم تفعيل الإشعارات ✅"), "success"); }
-      else { await disablePush(); toast(tr("تم إيقاف الإشعارات"), "info"); }
+      else { await disablePush(ctx); toast(tr("تم إيقاف الإشعارات"), "info"); }
     } catch (e) {
       toast(tr(e.message === "denied" ? "لم يتم السماح بالإشعارات" : "تعذّر تفعيل الإشعارات على هذا الجهاز"), "error");
     }

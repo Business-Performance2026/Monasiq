@@ -39,7 +39,7 @@ async function push(q, title, body, link) {
     if (c.includes("registration-token-not-registered") || c.includes("invalid-registration-token") || c.includes("invalid-argument")) dead.push(docs[i].ref);
   });
   await Promise.all(dead.map(r => r.delete().catch(() => {})));
-  logger.info("push", { title, sent: res.successCount, failed: res.failureCount });
+  logger.info("push", { title, sent: res.successCount, failed: res.failureCount, errors: res.responses.filter(r => !r.success).map(r => r.error?.code) });
   return res.successCount;
 }
 const adminTokens = () => db.collection("pushTokens").where("role", "==", "admin");

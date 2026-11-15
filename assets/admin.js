@@ -1,8 +1,8 @@
 // لوحة إدارة المنصة: المدارس، طلبات الاشتراك، إعدادات الاشتراك
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, tr, lang, isEn, fillIcons, sendReset, norm } from "./app.js?v=202611141906";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, STATUS, errMsg, t, tr, lang, isEn, fillIcons, sendReset, norm } from "./app.js?v=202611141950";
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, getDocs, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { watchBilling, subState, nextExpiry, fmtDate, money, stateLabel, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141906";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611141906";
+import { watchBilling, subState, nextExpiry, fmtDate, money, stateLabel, DAY, BILLING_DEFAULT } from "./billing.js?v=202611141950";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611141950";
 applyBranding();
 
 const $ = id => document.getElementById(id);
@@ -50,7 +50,7 @@ function start() {
   refreshPush(pushCtx);
   async function drawPush(box, onlyIfOff = false) {
     if (!box) return;
-    const st = await pushState();
+    const st = await pushState(user.uid);
     if (onlyIfOff && st === "on") { box.innerHTML = ""; return; }
     box.innerHTML = pushCardHTML(st, esc);
     bindPushCard(box, pushCtx, () => drawPush(box, onlyIfOff), toast);
