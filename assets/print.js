@@ -1,5 +1,5 @@
 // تصميم ورقة الجدول (طباعة + تحميل PDF) — يُستخدم في لوحة المدرسة ولوحة المعلم
-import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611142049";
+import { APP_NAME, esc, tr, isEn } from "./app.js?v=202611142118";
 
 const DAY_EN = { "الأحد": "Sunday", "الاثنين": "Monday", "الثلاثاء": "Tuesday", "الأربعاء": "Wednesday", "الخميس": "Thursday", "الجمعة": "Friday", "السبت": "Saturday" };
 const dayLabel = d => isEn ? (DAY_EN[d] || d) : d;
@@ -137,4 +137,30 @@ export function buildSheet({ kind, ownerId, title, school, settings, lessons, su
   else stats.push({ label: L("معلم"), value: secs.size });
   stats.push({ label: L("أكثر يوم"), value: Math.max(0, ...perDay) });
   return { kind, title, school, days: settings.days, periods: settings.periods, cells, stats, legend: [...legend.values()].sort((a, b) => b.count - a.count) };
+}
+
+// تحويل أي محتوى HTML إلى ملف PDF بصفحة A4 طولية (يُقسّم على عدة صفحات إذا طال)
+export async function downloadHtmlPDF(html, filename) {
+  await Promise.all([
+    loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"),
+    loadScript("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js")
+  ]);
+  if (document.fonts?.ready) await document.fonts.ready;
+  const host = document.createElement("div");
+  host.className = "doc-render"; host.innerHTML = html;
+  document.body.appendChild(host);
+  try {
+    const canvas = await window.html2canvas(host.firstElementChild, { scale: 2, backgroundColor: "#ffffff", logging: false });
+    const pdf = new window.jspdf.jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+    const W = 210, H = 297, m = 8, w = W - 2 * m, pageH = H - 2 * m;
+    const pxPerMm = canvas.width / w, sliceH = Math.floor(pageH * pxPerMm);
+    for (let y = 0, i = 0; y < canvas.height; y += sliceH, i++) {
+      const h = Math.min(sliceH, canvas.height - y);
+      const c = document.createElement("canvas"); c.width = canvas.width; c.height = h;
+      c.getContext("2d").drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+      if (i) pdf.addPage();
+      pdf.addImage(c.toDataURL("image/jpeg", 0.9), "JPEG", m, m, w, h / pxPerMm);
+    }
+    pdf.save(safeName(filename) + ".pdf");
+  } finally { host.remove(); }
 }

@@ -1,14 +1,14 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142049";
-import { setLang } from "./i18n.js?v=202611142049";
-import { schedule, reconcile } from "./scheduler.js?v=202611142049";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142049";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142049";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142049";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142049";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142049";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142049";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142049";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142118";
+import { setLang } from "./i18n.js?v=202611142118";
+import { schedule, reconcile } from "./scheduler.js?v=202611142118";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142118";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142118";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142118";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142118";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142118";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142118";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142118";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -99,6 +99,9 @@ function init(user) {
     document.querySelectorAll("[data-acc-badge]").forEach(b => { b.textContent = n; b.classList.toggle("hidden", !n); });
     if (loaded.size >= NEED && ["#accounts", "#overview", ""].includes(location.hash)) render();
   }, () => {});
+  // الاحتياط: الغيابات والتوزيعات اليومية
+  onSnapshot(col("absences"), snap => { SUB.abs = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (location.hash === "#subs" && loaded.size >= NEED) subsRedraw(); }, () => {});
+  onSnapshot(col("subs"), snap => { SUB.days = new Map(snap.docs.map(d => [d.id, d.data()])); if (location.hash === "#subs" && loaded.size >= NEED && !SUB.saving) subsRedraw(); }, () => {});
   // آخر نسخة أُرسلت للمعلمين (لمعرفة من تغيّر جدوله)
   onSnapshot(doc(db, "schools", SID, "timetable", "published"), d => {
     PUB.lessons = d.exists() ? (d.data().lessons || []) : null; PUB.ready = true;
@@ -127,12 +130,12 @@ function init(user) {
 }
 
 // ---------- التوجيه ----------
-const VIEWS = { billing: vBilling, departments: vDepartments, overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable, accounts: vAccounts };
+const VIEWS = { subs: vSubs, billing: vBilling, departments: vDepartments, overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable, accounts: vAccounts };
 function render() {
   if (loaded.size < NEED) return;
   const v = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
   document.querySelectorAll("#nav a, #bnav a, #sheet a").forEach(a => a.classList.toggle("active", a.dataset.v === v));
-  document.querySelector("[data-more]").classList.toggle("active", ["settings", "grades", "accounts", "departments", "billing"].includes(v));
+  document.querySelector("[data-more]").classList.toggle("active", ["settings", "grades", "accounts", "departments", "billing", "subjects"].includes(v));
   const view = $("view");
   view.onclick = null;
   document.body.classList.remove("has-sel");
@@ -395,6 +398,271 @@ function publishModal() {
   $("pubSkip").onclick = () => commit(false);
 }
 
+
+// =====================================================
+//  الاحتياط (حصص الانتظار)
+// =====================================================
+const SUB = { abs: [], days: new Map(), date: null, saving: false };
+const ymd = dt => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+const parseYmd = v => { const [y, m, d] = v.split("-").map(Number); return new Date(y, m - 1, d); };
+const subCfg = () => ({ dailyMax: 2, termStart: "", exclude: [], ...(S.school?.settings?.subs || {}) });
+const dayIdxOf = date => settings().days.indexOf(DAYS_ALL[parseYmd(date).getDay()]);
+const fmtDay = date => parseYmd(date).toLocaleDateString(isEn ? "en-GB" : "ar-OM", { weekday: "long", day: "numeric", month: "long" });
+// الغيابات في تاريخ معيّن: teacherId -> null (يوم كامل) أو Set للحصص
+function absentOn(date) {
+  const m = new Map();
+  for (const a of SUB.abs) if (a.from <= date && date <= (a.to || a.from)) {
+    if (!a.periods) m.set(a.teacherId, null);
+    else if (m.get(a.teacherId) !== null) { const st = m.get(a.teacherId) || new Set(); a.periods.forEach(p => st.add(p)); m.set(a.teacherId, st); }
+  }
+  return m;
+}
+const isAbsent = (abs, t, p) => abs.has(t) && (abs.get(t) === null || abs.get(t).has(p));
+// الحصص التي تحتاج بديلًا في تاريخ معيّن
+function neededOn(date) {
+  const d = dayIdxOf(date); if (d < 0) return [];
+  const abs = absentOn(date);
+  return placedOf(TT.saved).filter(x => x.d === d && isAbsent(abs, x.t, x.p)).sort((a, b) => a.p - b.p || secLabel(section(a.c)).localeCompare(secLabel(section(b.c))));
+}
+const subKey = x => `${x.p}|${x.c}|${x.absent}`;
+// عدد حصص الاحتياط لكل معلم منذ بداية الفصل (بدون اليوم المحدد)
+function subCounts(exceptDate) {
+  const cfg = subCfg(), m = new Map();
+  for (const [date, doc_] of SUB.days) {
+    if (date === exceptDate || (cfg.termStart && date < cfg.termStart)) continue;
+    for (const it of doc_.items || []) if (it.t) m.set(it.t, (m.get(it.t) || 0) + 1);
+  }
+  return m;
+}
+// المعلمون المتاحون لحصة معيّنة مع ترتيبهم
+function candidates(date, need, items) {
+  const d = dayIdxOf(date), { P } = ttDims(), rules = ttRules(), abs = absentOn(date), cfg = subCfg();
+  const busy = new Set(placedOf(TT.saved).filter(x => x.d === d).map(x => `${x.t}@${x.p}`));
+  const counts = subCounts(date), today = new Map();
+  for (const it of items) if (it.t) today.set(it.t, (today.get(it.t) || 0) + 1);
+  const takenAt = new Set(items.filter(it => it.t && it.p === need.p && subKey(it) !== subKey(need)).map(it => it.t));
+  const lessonsToday = t => placedOf(TT.saved).filter(x => x.d === d && x.t === t).length;
+  const subOf = t => new Set([teacherOf(t)?.subjectId, ...(teacherOf(t)?.assignments || []).map(a => a.subjectId)]);
+  const out = [];
+  for (const t of S.teachers) {
+    if (cfg.exclude.includes(t.id) || t.id === need.absent) continue;
+    if (busy.has(`${t.id}@${need.p}`) || isAbsent(abs, t.id, need.p) || takenAt.has(t.id)) continue;
+    const r = rules.teachers[t.id], sl = d * P + need.p;
+    if (r?.unavail?.has(sl) || r?.meetings?.has(sl)) continue;
+    const n = counts.get(t.id) || 0, nt = today.get(t.id) || 0;
+    const same = subOf(t.id).has(need.s);
+    out.push({ t, n, nt, same, full: nt >= cfg.dailyMax, score: n - (same ? 1.5 : 0) + nt * 0.5 + lessonsToday(t.id) * 0.05 });
+  }
+  return out.sort((a, b) => a.full - b.full || a.score - b.score || a.t.name.localeCompare(b.t.name, "ar"));
+}
+function dayItems(date) {
+  const saved = SUB.days.get(date)?.items || [];
+  const map = new Map(saved.map(it => [subKey(it), it]));
+  return neededOn(date).map(x => {
+    const k = { p: x.p, c: x.c, s: x.s, absent: x.t };
+    return { ...k, ...(map.get(subKey(k)) || {}), p: x.p, c: x.c, s: x.s, absent: x.t };
+  });
+}
+async function saveDay(date, items) {
+  SUB.saving = true;
+  try {
+    await setDoc(doc(db, "schools", SID, "subs", date), { date, items: items.map(it => ({ p: it.p, c: it.c, s: it.s, absent: it.absent, t: it.t || "", sent: it.sent || "" })), updatedAt: Date.now() });
+  } catch (e) { toast(errMsg(e), "error"); }
+  SUB.saving = false;
+}
+function vSubs() {
+  if (!SUB.date) SUB.date = ymd(new Date());
+  return `<div class="page-title"><h1>${tr("الاحتياط")}</h1>
+    <div class="row-actions"><button class="btn primary" id="absAdd">+ ${tr("تسجيل غياب")}</button></div></div>
+    <div class="card sub-date">
+      <button class="icon-btn" id="subPrev"><span data-ic="${isEn ? "chevL" : "chevR"}" data-size="18"></span></button>
+      <div class="sd-mid"><input type="date" id="subDate" value="${SUB.date}"><b id="subDayName"></b></div>
+      <button class="icon-btn" id="subNext"><span data-ic="${isEn ? "chevR" : "chevL"}" data-size="18"></span></button>
+    </div>
+    <div id="subBody"></div>
+    <div class="card" data-fold="subLog" data-sum=""><h3>${tr("سجل الاحتياط والإعدادات")}</h3><div id="subLog"></div></div>`;
+}
+function subsRedraw() {
+  const box = $("subBody"); if (!box) return;
+  const date = SUB.date, d = dayIdxOf(date), cfg = subCfg();
+  $("subDayName").textContent = fmtDay(date) + (date === ymd(new Date()) ? ` · ${tr("اليوم")}` : "");
+  const abs = SUB.abs.filter(a => a.from <= date && date <= (a.to || a.from));
+  const items = d < 0 ? [] : dayItems(date);
+  const filled = items.filter(it => it.t).length, unsent = items.filter(it => it.t && it.sent !== it.t).length;
+  const counts = subCounts(date);
+  const reasonL = { sick: "مرض", leave: "إجازة", official: "مهمة رسمية", training: "تدريب", other: "أخرى" };
+  box.innerHTML = `
+  <div class="card">
+    <div class="card-head"><h3>${tr("الغائبون")}</h3><span class="muted">${esc(tf("{0} معلم", abs.length))}</span></div>
+    ${abs.length ? `<div class="abs-list">${abs.map(a => `<div class="abs-row">
+      <div><b data-no-i18n>${esc(teacherOf(a.teacherId)?.name || "؟")}</b>
+        <small class="muted">${esc(a.periods ? tf("الحصص {0}", a.periods.map(p => p + 1).join("، ")) : tr("يوم كامل"))}${a.to && a.to !== a.from ? ` · ${esc(tf("من {0} إلى {1}", a.from, a.to))}` : ""}${a.reason ? ` · ${esc(tr(reasonL[a.reason] || a.reason))}` : ""}</small></div>
+      <button class="btn sm danger" data-del-abs="${a.id}">${tr("حذف")}</button></div>`).join("")}</div>`
+      : `<p class="muted" style="margin:0">${d < 0 ? tr("ليس يوم دوام") : tr("لا يوجد غياب مسجّل في هذا اليوم")}</p>`}
+  </div>
+  ${items.length ? `<div class="card">
+    <div class="card-head"><h3>${tr("حصص الاحتياط")}</h3><span class="muted">${esc(tf("{0} من {1} حصة لها بديل", filled, items.length))}</span></div>
+    <div class="row-actions" style="margin-bottom:.8rem">
+      <button class="btn" id="subAuto"><span data-ic="magic" data-size="18"></span>${tr("توزيع الاحتياط تلقائيًا")}</button>
+      <button class="btn primary" id="subSend" ${unsent ? "" : "disabled"}><span data-ic="bell" data-size="18"></span>${esc(unsent ? tf("اعتماد وإرسال ({0})", unsent) : tr("تم الإرسال"))}</button>
+      <button class="btn" id="subPdf"><span data-ic="download" data-size="18"></span>${tr("تحميل PDF")}</button>
+    </div>
+    <div class="sub-list">${items.map((it, i) => {
+      const cs = candidates(date, it, items), sb = subject(it.s);
+      const cur = it.t && !cs.some(c => c.t.id === it.t) ? `<option value="${it.t}" selected>${esc(teacherOf(it.t)?.name || "؟")}</option>` : "";
+      return `<div class="sub-row ${it.t ? (it.sent === it.t ? "sent" : "set") : "empty"}">
+        <div class="sr-p"><b>${it.p + 1}</b><small>${esc(settings().periods[it.p]?.start || "")}</small></div>
+        <div class="sr-m"><b><span class="dot" style="background:${sb?.color || "#999"}"></span> ${esc(secLabel(section(it.c)))} · ${esc(sb?.name || "")}</b>
+          <small class="muted">${esc(tf("بدل {0}", teacherOf(it.absent)?.name || ""))}</small></div>
+        <div class="sr-s">
+          <select data-i="${i}"><option value="">— ${tr("اختر البديل")} —</option>${cur}${cs.map(c => `<option value="${c.t.id}" ${c.t.id === it.t ? "selected" : ""} ${c.full && c.t.id !== it.t ? "disabled" : ""}>${c.same ? "⭐ " : ""}${esc(c.t.name)} (${c.n}${c.nt ? ` · ${tf("{0} اليوم", c.nt)}` : ""})</option>`).join("")}</select>
+          ${it.t ? `<span class="badge ${it.sent === it.t ? "ok" : "warn"}">${tr(it.sent === it.t ? "أُرسل" : "لم يُرسل")}</span>` : ""}
+        </div></div>`;
+    }).join("")}</div>
+    <p class="muted sub-hint">${tr("⭐ معلم نفس المادة · الرقم بين القوسين = عدد احتياطاته منذ بداية الفصل")}</p>
+  </div>` : ""}`;
+  fillIcons(box);
+  // السجل والإعدادات
+  const log = $("subLog");
+  if (log) {
+    const all = subCounts(null), rows = S.teachers.map(t => ({ t, n: all.get(t.id) || 0 })).sort((a, b) => b.n - a.n || a.t.name.localeCompare(b.t.name, "ar"));
+    log.innerHTML = `<div class="grid-2">
+        <div class="field"><label>${tr("بداية الفصل الدراسي (لحساب العدل)")}</label><input type="date" id="subTerm" value="${esc(cfg.termStart)}"></div>
+        <div class="field"><label>${tr("أقصى عدد حصص احتياط للمعلم في اليوم")}</label><input type="number" min="1" max="8" id="subMax" value="${cfg.dailyMax}"></div>
+      </div>
+      <div class="row-actions" style="margin-bottom:1rem"><button class="btn" id="subExcl">${esc(tf("المستثنون من الاحتياط ({0})", cfg.exclude.length))}</button><button class="btn primary" id="subCfgSave">${tr("حفظ")}</button>
+        <button class="btn" id="subReport"><span data-ic="download" data-size="18"></span>${tr("تقرير PDF")}</button></div>
+      <div class="sub-log">${rows.map(r => `<div><span data-no-i18n>${esc(r.t.name)}</span><b>${r.n}</b></div>`).join("")}</div>`;
+    fillIcons(log);
+  }
+  bindSubs();
+}
+function bindSubs() {
+  const date = SUB.date;
+  document.querySelectorAll("[data-del-abs]").forEach(b => (b.onclick = async () => {
+    if (!(await confirmBox(tr("حذف هذا الغياب؟"), tr("حذف")))) return;
+    try { await deleteDoc(dref("absences", b.dataset.delAbs)); } catch (e) { toast(errMsg(e), "error"); }
+  }));
+  const items = dayIdxOf(date) < 0 ? [] : dayItems(date);
+  document.querySelectorAll(".sub-list select").forEach(sel => (sel.onchange = async () => {
+    items[+sel.dataset.i].t = sel.value; await saveDay(date, items); subsRedraw();
+  }));
+  if ($("subAuto")) $("subAuto").onclick = async () => {
+    const work = items.map(it => ({ ...it }));
+    for (const it of work) {
+      if (it.t && it.sent === it.t) continue; // لا نغيّر ما أُرسل
+      it.t = "";
+      const c = candidates(date, it, work).find(x => !x.full);
+      if (c) it.t = c.t.id;
+    }
+    await saveDay(date, work); subsRedraw();
+    const miss = work.filter(x => !x.t).length;
+    toast(miss ? tf("لم نجد بديلًا متاحًا لـ {0} حصة", miss) : tr("تم توزيع الاحتياط ✅"), miss ? "error" : "success");
+  };
+  if ($("subSend")) $("subSend").onclick = () => sendSubs(date, items);
+  if ($("subPdf")) $("subPdf").onclick = () => subsPdf(date, items);
+  if ($("subCfgSave")) $("subCfgSave").onclick = async () => {
+    const cfg = { ...subCfg(), termStart: $("subTerm").value, dailyMax: Math.max(1, num($("subMax").value) || 2) };
+    try { await updateDoc(doc(db, "schools", SID), { settings: { ...cleanSettings(), subs: cfg }, updatedAt: serverTimestamp() }); toast(tr("تم الحفظ"), "success"); } catch (e) { toast(errMsg(e), "error"); }
+  };
+  if ($("subExcl")) $("subExcl").onclick = exclModal;
+  if ($("subReport")) $("subReport").onclick = subsReport;
+}
+function exclModal() {
+  const cfg = subCfg(), ex = new Set(cfg.exclude);
+  openModal(`${modalHead(tr("المستثنون من الاحتياط"))}
+    <input type="search" id="exQ" placeholder="${esc(tr("بحث..."))}" style="margin-bottom:.6rem">
+    <div class="ex-list">${S.teachers.map(t => `<label class="check" data-q="${esc(norm(t.name))}"><input type="checkbox" value="${t.id}" ${ex.has(t.id) ? "checked" : ""}> <span data-no-i18n>${esc(t.name)}</span></label>`).join("")}</div>
+    <div class="modal-actions"><button class="btn primary" id="exSave">${tr("حفظ")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+  $("exQ").oninput = e => { const w = norm(e.target.value); $("modal").querySelectorAll(".ex-list label").forEach(l => l.classList.toggle("hidden", !!w && !l.dataset.q.includes(w))); };
+  $("exSave").onclick = async () => {
+    const exclude = [...$("modal").querySelectorAll(".ex-list input:checked")].map(i => i.value);
+    try { await updateDoc(doc(db, "schools", SID), { settings: { ...cleanSettings(), subs: { ...subCfg(), exclude } }, updatedAt: serverTimestamp() }); closeModal(); toast(tr("تم الحفظ"), "success"); } catch (e) { toast(errMsg(e), "error"); }
+  };
+}
+function absModal() {
+  const P = settings().periods.length;
+  openModal(`${modalHead(tr("تسجيل غياب"))}
+    <form id="absForm">
+      <div class="field"><label>${tr("المعلم")}</label><input type="search" id="absQ" placeholder="${esc(tr("ابحث بالاسم"))}" autocomplete="off">
+        <select name="t" id="absT" size="5" required>${S.teachers.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></div>
+      <div class="grid-2">
+        <div class="field"><label>${tr("من تاريخ")}</label><input type="date" name="from" value="${SUB.date}" required></div>
+        <div class="field"><label>${tr("إلى تاريخ")}</label><input type="date" name="to" value="${SUB.date}" required></div>
+      </div>
+      <div class="field"><label>${tr("المدة")}</label>
+        <div class="seg" id="absKind"><button type="button" data-k="day" class="active">${tr("يوم كامل")}</button><button type="button" data-k="per">${tr("حصص محددة")}</button></div>
+        <div id="absPer" class="abs-per hidden">${Array.from({ length: P }, (_, p) => `<label class="check"><input type="checkbox" value="${p}"> ${p + 1}</label>`).join("")}</div></div>
+      <div class="field"><label>${tr("السبب (اختياري)")}</label><select name="reason"><option value="">—</option>
+        ${[["sick", "مرض"], ["leave", "إجازة"], ["official", "مهمة رسمية"], ["training", "تدريب"], ["other", "أخرى"]].map(([k, l]) => `<option value="${k}">${tr(l)}</option>`).join("")}</select></div>
+      <div class="modal-actions"><button class="btn primary">${tr("حفظ")}</button><button type="button" class="btn ghost" data-close>${tr("إلغاء")}</button></div>
+    </form>`);
+  let kind = "day";
+  $("absQ").oninput = e => { const w = norm(e.target.value); [...$("absT").options].forEach(o => (o.hidden = !!w && !norm(o.textContent).includes(w))); const f = [...$("absT").options].find(o => !o.hidden); if (f) $("absT").value = f.value; };
+  $("absKind").onclick = e => { const b = e.target.closest("button"); if (!b) return; kind = b.dataset.k; $("absKind").querySelectorAll("button").forEach(x => x.classList.toggle("active", x === b)); $("absPer").classList.toggle("hidden", kind !== "per"); };
+  $("absForm").onsubmit = async e => {
+    e.preventDefault();
+    const f = e.target, t = $("absT").value;
+    if (!t) return toast(tr("اختر المعلم"), "error");
+    const periods = kind === "per" ? [...$("absPer").querySelectorAll("input:checked")].map(i => +i.value) : null;
+    if (kind === "per" && !periods.length) return toast(tr("اختر الحصص"), "error");
+    const from = f.from.value, to = f.to.value < from ? from : f.to.value;
+    try { await addDoc(col("absences"), { teacherId: t, from, to, periods, reason: f.reason.value, at: Date.now() }); closeModal(); toast(tr("تم تسجيل الغياب"), "success"); }
+    catch (ex) { toast(errMsg(ex), "error"); }
+  };
+}
+// اعتماد وإرسال: إشعار للمعلمين البدلاء (ومن أُلغي احتياطه)
+async function sendSubs(date, items) {
+  const prev = SUB.days.get(date)?.items || [];
+  const out = [];
+  const txt = it => `${fmtDay(date)} · ${tf("الحصة {0}", it.p + 1)} · ${secLabel(section(it.c))} ${subject(it.s)?.name || ""} (${tf("بدل {0}", shortName(teacherOf(it.absent)?.name))})`;
+  for (const it of items) if (it.t && it.sent !== it.t) {
+    out.push({ t: it.t, text: txt(it) });
+    if (it.sent) out.push({ t: it.sent, text: txt(it), cancel: true });
+  }
+  for (const p of prev) if (p.sent && !items.some(it => subKey(it) === subKey(p) && it.t === p.sent) && !out.some(o => o.cancel && o.t === p.sent)) out.push({ t: p.sent, text: txt(p), cancel: true });
+  const noAcc = [...new Set(out.filter(o => !o.cancel).map(o => o.t))].filter(t => !accOfTeacher(t));
+  const b = writeBatch(db);
+  b.set(doc(db, "schools", SID, "subs", date), { date, items: items.map(it => ({ p: it.p, c: it.c, s: it.s, absent: it.absent, t: it.t || "", sent: it.t || "" })), updatedAt: Date.now(), sentAt: Date.now() });
+  if (out.length) b.set(doc(col("subNotices")), { date, items: out, at: Date.now() });
+  try {
+    await b.commit();
+    toast(tf("تم إرسال الاحتياط لـ {0} معلمين", new Set(out.filter(o => !o.cancel).map(o => o.t)).size), "success");
+    if (noAcc.length) {
+      openModal(`${modalHead(tr("معلمون بدون حساب في المنصة"))}
+        <p class="muted" style="margin-top:0">${tr("هؤلاء لن يصلهم إشعار. أرسل لهم عبر واتساب:")}</p>
+        <div class="pub-list">${noAcc.map(t => { const tt = teacherOf(t), lines = out.filter(o => o.t === t && !o.cancel).map(o => o.text);
+          return `<div class="pub-row" style="grid-template-columns:1fr auto"><div class="pub-main"><b data-no-i18n>${esc(tt?.name || "")}</b>${lines.map(l => `<small>${esc(l)}</small>`).join("")}</div>
+          ${teacherPhone(tt) ? `<a class="wa-btn" target="_blank" href="https://wa.me/${waNumber(teacherPhone(tt))}?text=${encodeURIComponent(tf("السلام عليكم أستاذ {0}، لديك حصة احتياط:", shortName(tt?.name)) + "\n" + lines.join("\n"))}">${WA_ICON}</a>` : `<span class="badge info">${tr("لا يوجد رقم")}</span>`}</div>`; }).join("")}</div>
+        <div class="modal-actions"><button class="btn ghost" data-close>${tr("إغلاق")}</button></div>`);
+    }
+  } catch (e) { toast(errMsg(e), "error"); }
+}
+async function subsPdf(date, items) {
+  const rows = items.map(it => `<tr><td>${it.p + 1}</td><td>${esc(secLabel(section(it.c)))}</td><td>${esc(subject(it.s)?.name || "")}</td><td>${esc(teacherOf(it.absent)?.name || "")}</td><td><b>${esc(teacherOf(it.t)?.name || "—")}</b></td></tr>`).join("");
+  const html = `<div class="doc-page" dir="${isEn ? "ltr" : "rtl"}"><div class="doc-head"><div><small>${esc(S.school.name)}</small><h2>${esc(tr("جدول الاحتياط"))}</h2><b>${esc(fmtDay(date))}</b></div></div>
+    <table class="doc-tbl"><thead><tr><th>${tr("الحصة")}</th><th>${tr("الشعبة")}</th><th>${tr("المادة")}</th><th>${tr("المعلم الغائب")}</th><th>${tr("المعلم البديل")}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  try { toast(tr("جارٍ تجهيز الملف")); await downloadHtmlPDF(html, `${tr("جدول الاحتياط")} ${date}`); } catch { toast(tr("تعذّر إنشاء ملف PDF، حاول مرة أخرى."), "error"); }
+}
+async function subsReport() {
+  const cfg = subCfg(), all = subCounts(null);
+  const rows = S.teachers.map(t => ({ t, n: all.get(t.id) || 0 })).sort((a, b) => b.n - a.n || a.t.name.localeCompare(b.t.name, "ar"));
+  const html = `<div class="doc-page" dir="${isEn ? "ltr" : "rtl"}"><div class="doc-head"><div><small>${esc(S.school.name)}</small><h2>${esc(tr("سجل الاحتياط"))}</h2><b>${esc(cfg.termStart ? tf("منذ {0}", cfg.termStart) : tr("كل الفترة"))}</b></div></div>
+    <table class="doc-tbl"><thead><tr><th>#</th><th>${tr("المعلم")}</th><th>${tr("عدد حصص الاحتياط")}</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.t.name)}</td><td><b>${r.n}</b></td></tr>`).join("")}</tbody></table></div>`;
+  try { toast(tr("جارٍ تجهيز الملف")); await downloadHtmlPDF(html, tr("سجل الاحتياط")); } catch { toast(tr("تعذّر إنشاء ملف PDF، حاول مرة أخرى."), "error"); }
+}
+BIND.subs = v => {
+  fillIcons(v);
+  foldCards(v, "subs");
+  const go = dt => { SUB.date = dt; $("subDate").value = dt; subsRedraw(); };
+  $("subDate").onchange = e => e.target.value && go(e.target.value);
+  const step = k => { const d = parseYmd(SUB.date); d.setDate(d.getDate() + k); go(ymd(d)); };
+  $("subPrev").onclick = () => step(isEn ? -1 : -1);
+  $("subNext").onclick = () => step(1);
+  $("absAdd").onclick = absModal;
+  subsRedraw();
+};
+
 // ---------- نافذة منبثقة ----------
 function openModal(html) { $("modal").innerHTML = html; $("modalBack").classList.add("show"); }
 function closeModal() { $("modalBack").classList.remove("show"); $("modal").innerHTML = ""; }
@@ -603,6 +871,7 @@ function cleanSettings() {
   if (st.freeAll) o.freeAll = st.freeAll;
   if (st.periodMax) o.periodMax = st.periodMax;
   if (st.maxRun) o.maxRun = st.maxRun;
+  if (st.subs) o.subs = st.subs;
   return o;
 }
 // تحويل البطاقات التي تحمل data-fold إلى أقسام قابلة للطي (العنوان يفتح ويغلق، والحالة تُحفظ)

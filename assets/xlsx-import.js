@@ -1,5 +1,5 @@
 // استيراد بيانات المدرسة من ملف Excel (أو CSV) — سطر لكل (معلم، مادة، شعبة)
-import { norm } from "./app.js?v=202611142049";
+import { norm } from "./app.js?v=202611142118";
 
 const XLSX_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
 const GRADE_NAMES = ["الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس", "السابع", "الثامن", "التاسع", "العاشر", "الحادي عشر", "الثاني عشر"];

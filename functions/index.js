@@ -81,6 +81,29 @@ exports.onTimetablePublished = onDocumentCreated("schools/{sid}/publishes/{pid}"
   logger.info("publish", { sid, teachers: pub.items.length, sent });
 });
 
+// الاحتياط: إشعار للمعلم البديل (أو إلغاء احتياطه)
+exports.onSubsSent = onDocumentCreated("schools/{sid}/subNotices/{nid}", async e => {
+  const n = e.data?.data(); if (!n?.items?.length) return;
+  const sid = e.params.sid;
+  const accs = await db.collection("teacherAccounts").where("schoolId", "==", sid).get();
+  const byT = new Map();
+  for (const it of n.items) { if (!byT.has(it.t)) byT.set(it.t, []); byT.get(it.t).push(it); }
+  let sent = 0;
+  for (const [t, list] of byT) {
+    const add = list.filter(x => !x.cancel), cancel = list.filter(x => x.cancel);
+    const title = add.length ? "عندك احتياط 📌" : "أُلغي احتياطك";
+    const body = (add.length ? add : cancel).map(x => x.text).join("\n");
+    for (const a of accs.docs.filter(a => a.get("teacherId") === t && a.get("status") === "active")) {
+      await a.ref.collection("notifications").doc(`${e.params.nid}_${t}`).set({
+        title, body, kind: "sub", at: Date.now(), read: false,
+        added: add.map(x => ({ text: x.text })), removed: cancel.map(x => ({ text: x.text }))
+      });
+      sent += await push(userTokens(a.id), title, body, "teacher.html");
+    }
+  }
+  logger.info("subs", { sid, teachers: byT.size, sent });
+});
+
 exports.onPaymentDeleted = onDocumentDeleted("payments/{id}", async e => {
   const path = e.data?.get("receiptPath"); if (!path) return;
   await admin.storage().bucket().file(path).delete().catch(() => {});

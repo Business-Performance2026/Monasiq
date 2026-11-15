@@ -1,13 +1,14 @@
 // لوحة المعلم: جدولي، حصص اليوم، حسابي
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611142049";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142049";
-import { buildRules } from "./rules.js?v=202611142049";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611142118";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142118";
+import { buildRules } from "./rules.js?v=202611142118";
 import { collection, doc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142049";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142118";
 
 applyBranding();
 const $ = id => document.getElementById(id);
-const S = { acc: null, school: null, tt: [], subjects: [], sections: [], grades: [], departments: [], teacher: null, notes: [] };
+const S = { acc: null, school: null, tt: [], subjects: [], sections: [], grades: [], departments: [], teacher: null, notes: [], subs: {} };
+const ymd = dt => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 const loaded = new Set();
 const NEED = ["acc", "school", "tt", "subjects", "sections", "grades", "departments", "teacher"];
 const DAY_EN = { "الأحد": "Sun", "الاثنين": "Mon", "الثلاثاء": "Tue", "الأربعاء": "Wed", "الخميس": "Thu", "الجمعة": "Fri", "السبت": "Sat" };
@@ -51,6 +52,9 @@ function init() {
     onSnapshot(collection(db, "schools", sid, k), snap => { S[k] = snap.docs.map(x => ({ id: x.id, ...x.data() })); mark(k); }, err);
   }
   window.addEventListener("resize", () => { if (loaded.size >= NEED.length) drawGrid(); });
+  // الاحتياط: اليوم وغدًا
+  const t0 = new Date(), t1 = new Date(); t1.setDate(t1.getDate() + 1);
+  for (const dt of [ymd(t0), ymd(t1)]) onSnapshot(doc(db, "schools", sid, "subs", dt), d => { S.subs[dt] = d.exists() ? (d.data().items || []) : []; render(); }, () => {});
   // إشعارات تحديث الجدول
   onSnapshot(collection(db, "teacherAccounts", user.uid, "notifications"), snap => {
     S.notes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at || 0) - (a.at || 0));
@@ -117,7 +121,11 @@ function render() {
   // اليوم الحالي ضمن أيام الدوام؟
   const todayName = DAYS_ALL[new Date().getDay()];
   const dIdx = st.days.indexOf(todayName);
-  const today = dIdx >= 0 ? my.filter(x => x.d === dIdx).sort((a, b) => a.p - b.p) : [];
+  const mySubs = dt => (S.subs[dt] || []).filter(x => x.t && x.t === S.acc.teacherId && x.sent === x.t);
+  const todaySubs = mySubs(ymd(new Date())).map(x => ({ ...x, sub: true }));
+  const tm = new Date(); tm.setDate(tm.getDate() + 1);
+  const tomorrowSubs = mySubs(ymd(tm));
+  const today = dIdx >= 0 ? [...my.filter(x => x.d === dIdx), ...todaySubs].sort((a, b) => a.p - b.p) : [];
   const perDay = st.days.map((_, d) => my.filter(x => x.d === d).length);
   const secs = new Set(my.map(x => x.c));
 
@@ -143,13 +151,18 @@ function render() {
     <div class="card-head"><h3>${esc(tr("حصص اليوم"))} <span class="muted" data-no-i18n style="font-weight:500">— ${esc(isEn ? (DAY_EN[todayName] || todayName) : todayName)}</span></h3></div>
     ${dIdx < 0 ? `<div class="empty">ليس يوم دوام</div>` : today.length ? `<div class="today-list">${today.map(x => {
       const sb = subject(x.s), pr = st.periods[x.p] || {};
-      return `<div class="today-item" style="--c:${sb?.color || "#64748b"}">
+      return `<div class="today-item ${x.sub ? "is-sub" : ""}" style="--c:${sb?.color || "#64748b"}">
         <div class="ti-p"><b>${x.p + 1}</b><small>${esc(pr.start || "")}</small></div>
-        <div class="ti-b"><b>${esc(secLabel(section(x.c)))}</b><span>${esc(sb?.name || "")}</span></div>
+        <div class="ti-b"><b>${esc(secLabel(section(x.c)))} ${x.sub ? `<span class="badge warn">${esc(tr("احتياط"))}</span>` : ""}</b><span>${esc(sb?.name || "")}</span></div>
         <div class="ti-t">${esc(pr.start || "")} – ${esc(pr.end || "")}</div>
       </div>`;
     }).join("")}</div>` : `<div class="empty">لا توجد لديك حصص اليوم 🎉</div>`}
   </div>
+  ${tomorrowSubs.length ? `<div class="card"><h3>${esc(tr("احتياط غدًا"))}</h3><div class="today-list">${tomorrowSubs.sort((a, b) => a.p - b.p).map(x => {
+    const sb = subject(x.s), pr = settings().periods[x.p] || {};
+    return `<div class="today-item is-sub" style="--c:${sb?.color || "#64748b"}"><div class="ti-p"><b>${x.p + 1}</b><small>${esc(pr.start || "")}</small></div>
+      <div class="ti-b"><b>${esc(secLabel(section(x.c)))} <span class="badge warn">${esc(tr("احتياط"))}</span></b><span>${esc(sb?.name || "")}</span></div><div class="ti-t">${esc(pr.start || "")} – ${esc(pr.end || "")}</div></div>`;
+  }).join("")}</div></div>` : ""}
 
   <div class="card tt-card">
     <div class="card-head"><h3>جدولي الأسبوعي</h3><div class="row-actions"><button class="btn sm primary" id="dlBtn"><span data-ic="download" data-size="16"></span>تحميل PDF</button></div></div>

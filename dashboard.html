@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>لوحة المدرسة | {app}</title>
   <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
-  <link rel="stylesheet" href="assets/style.css?v=202611142049">
-  <link rel="manifest" href="manifest.webmanifest?v=202611142049">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611142049">
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611142049">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611142049">
+  <link rel="stylesheet" href="assets/style.css?v=202611142118">
+  <link rel="manifest" href="manifest.webmanifest?v=202611142118">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611142118">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611142118">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611142118">
   <meta name="theme-color" content="#012950">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,12 +21,13 @@
 
 <div class="app hidden" id="appRoot">
   <aside class="side" id="side">
-    <div class="side-top"><div class="logo"><img class="logo-mark" src="assets/img/icon-96.png?v=202611142049" alt=""><span data-app-name></span></div>
+    <div class="side-top"><div class="logo"><img class="logo-mark" src="assets/img/icon-96.png?v=202611142118" alt=""><span data-app-name></span></div>
       <button class="bell" data-bell title="الإشعارات" aria-label="الإشعارات"><span data-ic="bell" data-size="20"></span><i class="nbadge hidden" data-bell-n></i></button></div>
     <div class="school-name" data-school-name></div>
     <nav id="nav">
       <a href="#overview" data-v="overview"><span data-ic="home"></span>الرئيسية</a>
       <a href="#timetable" data-v="timetable"><span data-ic="timetable"></span>توزيع الجدول</a>
+      <a href="#subs" data-v="subs"><span data-ic="swap"></span>الاحتياط</a>
       <a href="#teachers" data-v="teachers"><span data-ic="teachers"></span>المعلمون</a>
       <a href="#departments" data-v="departments"><span data-ic="dept"></span>الأقسام</a>
       <a href="#subjects" data-v="subjects"><span data-ic="subjects"></span>المواد</a>
@@ -42,7 +43,7 @@
   <div class="content">
     <header class="topbar">
       <div class="tb-title">
-        <img class="logo-mark sm" src="assets/img/icon-64.png?v=202611142049" alt="">
+        <img class="logo-mark sm" src="assets/img/icon-64.png?v=202611142118" alt="">
         <div><b data-app-name></b><small data-school-name></small></div>
       </div>
       <div class="tb-actions"><button class="bell" data-bell title="الإشعارات" aria-label="الإشعارات"><span data-ic="bell" data-size="20"></span><i class="nbadge hidden" data-bell-n></i></button>
@@ -55,13 +56,14 @@
     <a href="#overview" data-v="overview"><span data-ic="home"></span><span>الرئيسية</span></a>
     <a href="#timetable" data-v="timetable"><span data-ic="timetable"></span><span>الجدول</span></a>
     <a href="#teachers" data-v="teachers"><span data-ic="teachers"></span><span>المعلمون</span></a>
-    <a href="#subjects" data-v="subjects"><span data-ic="subjects"></span><span>المواد</span></a>
+    <a href="#subs" data-v="subs"><span data-ic="swap"></span><span>الاحتياط</span></a>
     <a href="#" data-more><span data-ic="more"></span><span>المزيد</span><i class="nbadge dotb hidden" data-acc-badge></i></a>
   </nav>
 
   <div class="sheet-back" id="sheet">
     <div class="sheet">
       <div class="sheet-grip"></div>
+      <a href="#subjects" data-v="subjects"><span data-ic="subjects"></span>المواد</a>
       <a href="#departments" data-v="departments"><span data-ic="dept"></span>الأقسام</a>
       <a href="#accounts" data-v="accounts"><span data-ic="userCheck"></span>حسابات المعلمين <span class="nbadge hidden" data-acc-badge></span></a>
       <a href="#grades" data-v="grades"><span data-ic="grades"></span>الصفوف والشعب</a>
@@ -75,6 +77,6 @@
 
 <div class="modal-back" id="modalBack"><div class="modal" id="modal"></div></div>
 
-<script type="module" src="assets/dashboard.js?v=202611142049"></script>
+<script type="module" src="assets/dashboard.js?v=202611142118"></script>
 </body>
 </html>

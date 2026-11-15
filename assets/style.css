@@ -803,3 +803,39 @@ body.ro #view .tt-hint { display: none; }
 .tt-cell.fresh .lsn { box-shadow: 0 0 0 3px var(--gold); animation: freshPulse 1.6s ease-in-out 3; }
 @keyframes freshPulse { 50% { box-shadow: 0 0 0 6px rgba(224,165,38,.35); } }
 .teacher-page .bell { color: var(--ink); background: var(--primary-soft); }
+
+/* ===== الاحتياط ===== */
+.sub-date { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .7rem .9rem; }
+.sd-mid { display: flex; flex-direction: column; align-items: center; gap: .2rem; flex: 1; }
+.sd-mid input { max-width: 200px; text-align: center; }
+.sd-mid b { font-size: .95rem; }
+.abs-list { display: flex; flex-direction: column; }
+.abs-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .55rem 0; border-bottom: 1px solid var(--line); }
+.abs-row:last-child { border-bottom: 0; }
+.abs-row > div { display: flex; flex-direction: column; }
+.sub-list { display: flex; flex-direction: column; gap: .5rem; }
+.sub-row { display: grid; grid-template-columns: 52px 1fr minmax(220px, 300px); gap: .7rem; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: .55rem .7rem; border-inline-start: 5px solid var(--line); }
+.sub-row.empty { border-inline-start-color: var(--bad); } .sub-row.set { border-inline-start-color: var(--warn); } .sub-row.sent { border-inline-start-color: var(--ok); }
+.sr-p { display: flex; flex-direction: column; align-items: center; } .sr-p b { font-size: 1.2rem; } .sr-p small { color: var(--muted); font-size: .72rem; }
+.sr-m { display: flex; flex-direction: column; min-width: 0; } .sr-m small { font-size: .82rem; }
+.sr-s { display: flex; align-items: center; gap: .4rem; } .sr-s select { flex: 1; min-width: 0; }
+.sub-hint { font-size: .8rem; margin: .7rem 0 0; }
+.sub-log { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .3rem 1rem; }
+.sub-log > div { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--line); padding: .3rem 0; font-size: .9rem; }
+.abs-per { display: flex; flex-wrap: wrap; gap: .3rem .9rem; margin-top: .6rem; }
+#absT { margin-top: .4rem; height: auto; }
+.ex-list { display: flex; flex-direction: column; gap: .2rem; max-height: 50vh; overflow-y: auto; }
+@media (max-width: 640px) {
+  .sub-row { grid-template-columns: 44px 1fr; }
+  .sr-s { grid-column: 1 / -1; }
+}
+/* ملفات PDF النصية (الاحتياط) */
+.doc-render { position: fixed; left: -10000px; top: 0; width: 794px; }
+.doc-page { width: 794px; padding: 28px; background: #fff; font-family: "IBM Plex Sans Arabic", "Tajawal", sans-serif; color: #0f172a; box-sizing: border-box; }
+.doc-head { background: linear-gradient(135deg, #0b4a8b, #012950); color: #fff; border-radius: 14px; padding: 16px 20px; margin-bottom: 16px; border-bottom: 4px solid #e0a526; }
+.doc-head h2 { margin: .1rem 0; font-size: 26px; } .doc-head small { opacity: .85; }
+.doc-tbl { width: 100%; border-collapse: collapse; font-size: 15px; }
+.doc-tbl th { background: #eaf2fc; color: #0b3f78; padding: 9px; border: 1px solid #cbd5e1; }
+.doc-tbl td { padding: 9px; border: 1px solid #e2e8f0; text-align: center; }
+.doc-tbl tr:nth-child(even) td { background: #f8fafc; }
+.today-item.is-sub { background: var(--gold-soft); }
