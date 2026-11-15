@@ -49,7 +49,25 @@ jobs:
         run: |
           gcloud services enable cloudfunctions.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
             run.googleapis.com eventarc.googleapis.com pubsub.googleapis.com cloudscheduler.googleapis.com \
-            firebaseextensions.googleapis.com fcm.googleapis.com firebasestorage.googleapis.com --project monasiq || true
+            firebaseextensions.googleapis.com fcm.googleapis.com firebasestorage.googleapis.com \
+            cloudresourcemanager.googleapis.com iam.googleapis.com --project monasiq || true
+
+      - name: Grant roles needed by Cloud Functions
+        if: steps.chk.outputs.skip != '1'
+        run: |
+          SA=$(python3 -c "import json,os;print(json.load(open(os.environ['GOOGLE_APPLICATION_CREDENTIALS']))['client_email'])")
+          echo "Deploying as: $SA"
+          echo "Roles of this account:"; gcloud projects get-iam-policy monasiq --flatten="bindings[].members" --filter="bindings.members:serviceAccount:$SA" --format="value(bindings.role)" || true
+          NUM=$(gcloud projects describe monasiq --format='value(projectNumber)')
+          gcloud beta services identity create --service=pubsub.googleapis.com --project monasiq >/dev/null 2>&1 || true
+          gcloud beta services identity create --service=eventarc.googleapis.com --project monasiq >/dev/null 2>&1 || true
+          bind() { gcloud projects add-iam-policy-binding monasiq --member="$1" --role="$2" --condition=None --quiet >/dev/null && echo "ok $2 -> $1"; }
+          bind serviceAccount:service-$NUM@gcp-sa-pubsub.iam.gserviceaccount.com roles/iam.serviceAccountTokenCreator
+          bind serviceAccount:$NUM-compute@developer.gserviceaccount.com roles/run.invoker
+          bind serviceAccount:$NUM-compute@developer.gserviceaccount.com roles/eventarc.eventReceiver
+          bind serviceAccount:service-$NUM@gcp-sa-eventarc.iam.gserviceaccount.com roles/eventarc.serviceAgent || true
+          # Firestore في منطقة واحدة: Eventarc يحتاج أن يقرأ أحداثها عبر Pub/Sub
+          bind serviceAccount:service-$NUM@gs-project-accounts.iam.gserviceaccount.com roles/pubsub.publisher || true
 
       - name: Pick functions region from the Firestore location
         if: steps.chk.outputs.skip != '1'
