@@ -1,14 +1,14 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142147";
-import { setLang } from "./i18n.js?v=202611142147";
-import { schedule, reconcile } from "./scheduler.js?v=202611142147";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142147";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142147";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142147";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142147";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142147";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142147";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142147";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142201";
+import { setLang } from "./i18n.js?v=202611142201";
+import { schedule, reconcile } from "./scheduler.js?v=202611142201";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142201";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142201";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142201";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142201";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142201";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142201";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142201";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -88,7 +88,7 @@ function init(user) {
     B.notes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at || 0) - (a.at || 0));
     updateBell();
   }, () => {});
-  document.querySelectorAll("[data-bell]").forEach(b => (b.onclick = openBell));
+  document.querySelectorAll("[data-bell]").forEach(b => (b.onclick = () => openBell()));
   refreshPush({ uid: SID, role: "school", schoolId: SID });
   // وضع المشاهدة فقط بعد انتهاء الاشتراك: نمنع أزرار التعديل
   document.addEventListener("click", roGuard, true);
@@ -153,7 +153,7 @@ const curSub = () => subState(S.school, B.cfg);
 const isRO = () => !!S.school && curSub().state === "expired";
 const pendingPay = () => B.pays.find(p => p.status === "pending");
 function roToast() { toast(tr("انتهى الاشتراك: يمكنك المشاهدة والتحميل فقط. جدّد من صفحة «اشتراكاتي»."), "error"); }
-const RO_ALLOW = "[data-push],[data-pr],[data-act=wa],.wa-btn,.ld-head,.fold-head,.gh,#ttMode,#ttPrev,#ttNext,.tt-find,#ttPrint,#expPdfT,#expPdfS,[data-close],.x,.lang-btn,[data-bell],#billView,.ld-filters,#tFoldAll,.t-group-head,#xlsTpl,#dlCancel,.sub-banner";
+const RO_ALLOW = "#notiOld,[data-push],[data-pr],[data-act=wa],.wa-btn,.ld-head,.fold-head,.gh,#ttMode,#ttPrev,#ttNext,.tt-find,#ttPrint,#expPdfT,#expPdfS,[data-close],.x,.lang-btn,[data-bell],#billView,.ld-filters,#tFoldAll,.t-group-head,#xlsTpl,#dlCancel,.sub-banner";
 function roGuard(e) {
   if (!isRO()) return;
   const t = e.target;
@@ -189,19 +189,21 @@ function updateBell() {
   const n = B.notes.filter(x => !x.read).length + subAlerts().length;
   document.querySelectorAll("[data-bell-n]").forEach(b => { b.textContent = n; b.classList.toggle("hidden", !n); });
 }
-function openBell() {
-  const al = subAlerts();
-  const items = [...al.map(a => ({ ...a, alert: true })), ...B.notes.slice(0, 30)];
+// الإشعارات: تظهر الجديدة فقط، والمقروءة تختفي (ويمكن عرضها من «الإشعارات السابقة»)
+function openBell(showOld = false) {
+  const al = subAlerts(), fresh = B.notes.filter(x => !x.read), old = B.notes.filter(x => x.read);
+  const items = [...al.map(a => ({ ...a, alert: true })), ...fresh, ...(showOld ? old.slice(0, 30) : [])];
+  const card = x => `<a class="noti ${x.kind || "info"} ${x.read || x.alert ? "" : "new"}" href="#billing" data-close>
+      <b>${esc(x.title)}</b>${x.body ? `<span>${esc(x.body)}</span>` : ""}${x.at ? `<small>${esc(new Date(x.at).toLocaleString(isEn ? "en-GB" : "ar-OM", { dateStyle: "medium", timeStyle: "short" }))}</small>` : ""}</a>`;
   openModal(`${modalHead(tr("الإشعارات"))}
-    <div class="noti-list">${items.length ? items.map(x => `<a class="noti ${x.kind || "info"} ${x.read || x.alert ? "" : "new"}" href="#billing" data-close>
-      <b>${esc(x.title)}</b>${x.body ? `<span>${esc(x.body)}</span>` : ""}${x.at ? `<small>${esc(new Date(x.at).toLocaleString(isEn ? "en-GB" : "ar-OM", { dateStyle: "medium", timeStyle: "short" }))}</small>` : ""}</a>`).join("")
-      : `<div class="empty">${tr("لا توجد إشعارات")}</div>`}</div>
+    <div class="noti-list">${items.length ? items.map(card).join("") : `<div class="empty">${tr("لا توجد إشعارات جديدة")}</div>`}</div>
+    ${!showOld && old.length ? `<button class="btn ghost block noti-old" id="notiOld">${esc(tf("الإشعارات السابقة ({0})", old.length))}</button>` : ""}
     <div id="pushBox2" style="margin-top:1rem"></div>`);
   drawPush($("pushBox2"));
-  const unread = B.notes.filter(x => !x.read);
-  if (unread.length) {
+  if ($("notiOld")) $("notiOld").onclick = () => openBell(true);
+  if (fresh.length) {
     const b = writeBatch(db);
-    unread.forEach(x => b.update(dref("notifications", x.id), { read: true }));
+    fresh.forEach(x => b.update(dref("notifications", x.id), { read: true }));
     b.commit().catch(() => {});
   }
 }

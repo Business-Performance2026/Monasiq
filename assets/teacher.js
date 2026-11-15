@@ -1,9 +1,9 @@
 // لوحة المعلم: جدولي، حصص اليوم، حسابي
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611142147";
-import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142147";
-import { buildRules } from "./rules.js?v=202611142147";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, errMsg, DAYS_ALL, t as tf, tr, fillIcons, isEn, sendReset } from "./app.js?v=202611142201";
+import { buildSheet, downloadSheetsPDF } from "./print.js?v=202611142201";
+import { buildRules } from "./rules.js?v=202611142201";
 import { collection, doc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142147";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142201";
 
 applyBranding();
 const $ = id => document.getElementById(id);
@@ -60,7 +60,7 @@ function init() {
     S.notes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at || 0) - (a.at || 0));
     updateBell(); render();
   }, () => {});
-  $("bellBtn").onclick = openBell;
+  $("bellBtn").onclick = () => openBell();
   $("modalBack").addEventListener("click", e => { if (e.target.id === "modalBack" || e.target.closest("[data-close]")) closeModal(); });
   refreshPush({ uid: user.uid, role: "teacher", schoolId: sid });
 }
@@ -87,15 +87,20 @@ async function drawPush(box) {
   box.innerHTML = pushCardHTML(await pushState(user.uid), esc);
   bindPushCard(box, pushCtx(), () => drawPush(box), toast);
 }
-function openBell() {
+function openBell(showOld = false) {
+  const fresh = S.notes.filter(x => !x.read), old = S.notes.filter(x => x.read);
+  const items = [...fresh, ...(showOld ? old.slice(0, 30) : [])];
   openModal(`<div class="modal-head"><h3>${esc(tr("الإشعارات"))}</h3><button class="x" data-close>×</button></div>
-    <div class="noti-list">${S.notes.length ? S.notes.slice(0, 30).map(n => `<div class="noti ${n.read ? "" : "new"}">
+    <div class="noti-list">${items.length ? items.map(n => `<div class="noti ${n.read ? "" : "new"}">
       <b>${esc(n.title || "")}</b><span>${esc(n.body || "")}</span>${changesHTML(n)}<small>${esc(when(n.at))}</small></div>`).join("")
-      : `<div class="empty">${esc(tr("لا توجد إشعارات"))}</div>`}</div>
+      : `<div class="empty">${esc(tr("لا توجد إشعارات جديدة"))}</div>`}</div>
+    ${!showOld && old.length ? `<button class="btn ghost block noti-old" id="notiOld">${esc(tf("الإشعارات السابقة ({0})", old.length))}</button>` : ""}
     <div id="pushBox2" style="margin-top:1rem"></div>`);
   fillIcons($("modal"));
   drawPush($("pushBox2"));
-  markRead();
+  if ($("notiOld")) $("notiOld").onclick = () => openBell(true);
+  // الإشعارات العادية تُعلَّم مقروءة؛ إشعار تحديث الجدول يبقى حتى يضغط المعلم «حسنًا» في صفحته
+  markRead(fresh.filter(n => n.kind !== "tt"));
 }
 
 const subject = id => S.subjects.find(s => s.id === id);
