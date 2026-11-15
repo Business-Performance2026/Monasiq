@@ -858,3 +858,8 @@ body.ro #view .tt-hint { display: none; }
 .st-row:last-child { border-bottom: 0; }
 .st-row > div:first-child { display: flex; flex-direction: column; min-width: 0; }
 @media (max-width: 760px) { .st-charts { grid-template-columns: 1fr; } }
+.bf-grades { display: flex; flex-wrap: wrap; gap: .3rem 1.2rem; }
+.bf-list:not(:empty) { margin-top: 1rem; border-top: 1px solid var(--line); padding-top: .6rem; }
+.bf-list h4 { margin: 0 0 .4rem; font-size: .95rem; }
+.bf-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .4rem 0; border-bottom: 1px dashed var(--line); font-size: .9rem; }
+.bf-row:last-child { border-bottom: 0; }

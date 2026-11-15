@@ -1,14 +1,14 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142135";
-import { setLang } from "./i18n.js?v=202611142135";
-import { schedule, reconcile } from "./scheduler.js?v=202611142135";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142135";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142135";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142135";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142135";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142135";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142135";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142135";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142147";
+import { setLang } from "./i18n.js?v=202611142147";
+import { schedule, reconcile } from "./scheduler.js?v=202611142147";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142147";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142147";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142147";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142147";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142147";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142147";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142147";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -663,6 +663,80 @@ BIND.subs = v => {
   subsRedraw();
 };
 
+
+// ---------- التفريغ الجماعي للشعب ----------
+// تجميع التفريغات الموجودة: لكل يوم، فترات متتالية وعدد الشعب التي فيها
+function bulkGroups() {
+  const st = settings(), P = st.periods.length, total = S.sections.length, out = [];
+  for (let d = 0; d < st.days.length; d++) {
+    const whole = S.sections.filter(x => (x.rules?.free || []).some(f => f.d === d && f.p === -1)).length;
+    if (whole) out.push({ d, from: -1, to: -1, n: whole });
+    let cur = null;
+    for (let p = 0; p <= P; p++) {
+      const n = p < P ? S.sections.filter(x => (x.rules?.free || []).some(f => f.d === d && (f.p === p))).length : 0;
+      if (cur && n === cur.n) { cur.to = p; continue; }
+      if (cur && cur.n) out.push(cur);
+      cur = n ? { d, from: p, to: p, n } : null;
+    }
+  }
+  return out.map(g => ({ ...g, all: g.n === total }));
+}
+const bulkLabel = g => `${tr(settings().days[g.d] || "")} · ${g.from === -1 ? tr("يوم كامل") : g.from === g.to ? tf("الحصة {0}", g.from + 1) : tf("الحصص {0}-{1}", g.from + 1, g.to + 1)}`;
+function bulkSummary() { const g = bulkGroups().filter(x => x.all); return g.length ? g.map(bulkLabel).join("، ") : ""; }
+function bulkListHTML() {
+  const gs = bulkGroups(); if (!gs.length) return "";
+  return `<h4>${tr("التفريغات الحالية")}</h4>${gs.map(g => `<div class="bf-row"><span>${esc(bulkLabel(g))} — <b>${esc(g.all ? tr("كل الشعب") : tf("{0} شعبة", g.n))}</b></span>
+    <button class="btn sm danger" data-bf-del="${g.d}|${g.from}|${g.to}">${tr("إزالة")}</button></div>`).join("")}`;
+}
+// تطبيق أو إزالة تفريغ على مجموعة شعب
+async function bulkFree(secs, d, from, to, remove) {
+  const b = writeBatch(db); let n = 0, skipped = 0;
+  for (const x of secs) {
+    const r = x.rules || {}, free = [...(r.free || [])], days = r.days || [];
+    let next;
+    if (remove) {
+      next = free.filter(f => !(f.d === d && (from === -1 ? f.p === -1 : f.p >= from && f.p <= to)));
+    } else {
+      if (days.some(o => o.d === d)) { skipped++; continue; } // يوم مخصص لمعلم في هذه الشعبة
+      if (from === -1) next = [...free.filter(f => f.d !== d), { d, p: -1 }];
+      else {
+        if (free.some(f => f.d === d && f.p === -1)) continue; // اليوم فارغ أصلًا
+        next = [...free]; for (let p = from; p <= to; p++) if (!next.some(f => f.d === d && f.p === p)) next.push({ d, p });
+      }
+    }
+    if (JSON.stringify(next) === JSON.stringify(free)) continue;
+    b.update(dref("sections", x.id), { rules: { ...r, free: next, days } }); n++;
+  }
+  if (n) await b.commit();
+  return { n, skipped };
+}
+function bindBulkFree() {
+  if (!$("bfApply")) return;
+  let kind = "day";
+  $("bfKind").onclick = e => { const b = e.target.closest("button"); if (!b) return; kind = b.dataset.k; $("bfKind").querySelectorAll("button").forEach(x => x.classList.toggle("active", x === b)); $("bfRange").classList.toggle("hidden", kind !== "range"); };
+  const run = async remove => {
+    const gids = new Set([...document.querySelectorAll(".bf-grades input:checked")].map(i => i.value));
+    const secs = S.sections.filter(x => gids.has(x.gradeId));
+    if (!secs.length) return toast(tr("اختر صفًا واحدًا على الأقل"), "error");
+    const d = +$("bfDay").value; let from = -1, to = -1;
+    if (kind === "range") { from = +$("bfFrom").value; to = +$("bfTo").value; if (to < from) [from, to] = [to, from]; }
+    const label = bulkLabel({ d, from, to });
+    if (!(await confirmBox(tf(remove ? "إزالة تفريغ «{0}» من {1} شعبة؟" : "تفريغ «{0}» لـ {1} شعبة؟", label, secs.length), tr(remove ? "إزالة" : "تطبيق"), remove))) return;
+    try {
+      const r = await bulkFree(secs, d, from, to, remove);
+      toast(tf(remove ? "تمت الإزالة من {0} شعبة" : "تم التفريغ في {0} شعبة", r.n) + (r.skipped ? " · " + tf("تم تجاوز {0} شعبة لأن هذا اليوم مخصص فيها لمعلم", r.skipped) : ""), "success");
+    } catch (e) { toast(errMsg(e), "error"); }
+  };
+  $("bfApply").onclick = () => run(false);
+  $("bfRemove").onclick = () => run(true);
+  $("bfList").onclick = async e => {
+    const b = e.target.closest("[data-bf-del]"); if (!b) return;
+    const [d, from, to] = b.dataset.bfDel.split("|").map(Number);
+    if (!(await confirmBox(tf("إزالة تفريغ «{0}» من كل الشعب؟", bulkLabel({ d, from, to })), tr("إزالة")))) return;
+    try { const r = await bulkFree(S.sections, d, from, to, true); toast(tf("تمت الإزالة من {0} شعبة", r.n), "success"); } catch (ex) { toast(errMsg(ex), "error"); }
+  };
+}
+
 // ---------- نافذة منبثقة ----------
 function openModal(html) { $("modal").innerHTML = html; $("modalBack").classList.add("show"); }
 function closeModal() { $("modalBack").classList.remove("show"); $("modal").innerHTML = ""; }
@@ -1084,6 +1158,22 @@ function vGrades() {
     <datalist id="gradeNames">${GRADE_NAMES.map(n => `<option value="${n}">`).join("")}</datalist>
     <p class="muted" style="margin:0">الشعبة تظهر بالشكل <b>رقم الشعبة/رمز الصف</b>، مثل <b>5/12</b> = الصف الثاني عشر الشعبة 5.</p>
   </div>
+  ${S.sections.length ? `<div class="card" data-fold="bulkFree" data-sum="${esc(bulkSummary())}">
+    <h3>تفريغ جماعي للشعب</h3>
+    <p class="muted" style="margin-top:0">${tr("فرّغ يومًا كاملًا أو حصصًا محددة لكل الشعب أو لصفوف معيّنة دفعة واحدة، بدل تعديل كل شعبة لوحدها.")}</p>
+    <div class="field"><label>${tr("الصفوف")}</label>
+      <div class="bf-grades">${S.grades.map(g => `<label class="check"><input type="checkbox" value="${g.id}" checked> ${esc(g.name)} <span class="muted">(${S.sections.filter(x => x.gradeId === g.id).length})</span></label>`).join("")}</div></div>
+    <div class="grid-2">
+      <div class="field"><label>${tr("اليوم")}</label><select id="bfDay">${settings().days.map((d, i) => `<option value="${i}">${esc(tr(d))}</option>`).join("")}</select></div>
+      <div class="field"><label>${tr("المدة")}</label><div class="seg" id="bfKind"><button type="button" data-k="day" class="active">${tr("يوم كامل")}</button><button type="button" data-k="range">${tr("من حصة إلى حصة")}</button></div></div>
+    </div>
+    <div class="grid-2 hidden" id="bfRange">
+      <div class="field"><label>${tr("من الحصة")}</label><select id="bfFrom">${settings().periods.map((_, p) => `<option value="${p}">${p + 1}</option>`).join("")}</select></div>
+      <div class="field"><label>${tr("إلى الحصة")}</label><select id="bfTo">${settings().periods.map((_, p, a) => `<option value="${p}" ${p === a.length - 1 ? "selected" : ""}>${p + 1}</option>`).join("")}</select></div>
+    </div>
+    <div class="row-actions"><button class="btn primary" id="bfApply">${tr("تطبيق التفريغ")}</button><button class="btn" id="bfRemove">${tr("إزالة هذا التفريغ")}</button></div>
+    <div id="bfList" class="bf-list">${bulkListHTML()}</div>
+  </div>` : ""}
   ${S.grades.length ? S.grades.map(g => {
     const secs = S.sections.filter(s => s.gradeId === g.id);
     const open = gOpen.has(g.id), nr = secs.reduce((a, x) => a + secRuleCount(x), 0);
@@ -1171,6 +1261,7 @@ function sectionModal(sec) {
 BIND.grades = v => {
   fillIcons(v);
   foldCards(v, "grades", S.grades.length ? [] : ["addGrade"]);
+  bindBulkFree();
   v.onkeydown = e => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".gh")) { e.preventDefault(); e.target.click(); } };
   const f = $("gradeForm");
   f.name.oninput = () => { const i = GRADE_NAMES.indexOf(f.name.value.trim()); if (i >= 0) f.code.value = i + 1; };
