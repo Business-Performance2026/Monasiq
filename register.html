@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>التسجيل | {app}</title>
   <script>try{if(localStorage.getItem("lang")==="en"){var h=document.documentElement;h.className+=" i18n-pending";h.dir="ltr";h.lang="en";setTimeout(function(){h.classList.remove("i18n-pending")},2500)}}catch(e){}</script>
-  <link rel="stylesheet" href="assets/style.css?v=202611142201">
-  <link rel="manifest" href="manifest.webmanifest?v=202611142201">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611142201">
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611142201">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611142201">
+  <link rel="stylesheet" href="assets/style.css?v=202611142213">
+  <link rel="manifest" href="manifest.webmanifest?v=202611142213">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon-32.png?v=202611142213">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/img/icon-16.png?v=202611142213">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=202611142213">
   <meta name="theme-color" content="#012950">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,7 +20,7 @@
 <button class="lang-btn auth-lang" data-lang-toggle></button>
 <div class="auth-page">
   <div class="auth-box">
-    <a href="index.html" class="auth-brand"><img class="auth-logo" src="assets/img/logo.png?v=202611142201" alt="مُنسِّق"></a>
+    <a href="index.html" class="auth-brand"><img class="auth-logo" src="assets/img/logo.png?v=202611142213" alt="مُنسِّق"></a>
 
     <div class="card" id="formCard">
       <div class="seg wide" id="typeSeg">
@@ -33,10 +33,13 @@
         <h1>تسجيل مدرسة جديدة</h1>
         <p class="sub">بعد إرسال الطلب ستراجعه إدارة المنصة وتفعّل حسابك.</p>
         <form id="regForm" novalidate>
-          <div class="field"><label>اسم المدرسة *</label><input name="name" required placeholder="مثال: مدرسة أبو عبيدة (10-12)"></div>
           <div class="grid-2">
-            <div class="field"><label>المحافظة / المنطقة *</label><input name="region" required placeholder="مثال: الداخلية"></div>
-            <div class="field"><label>الولاية / المدينة</label><input name="wilayah" placeholder="مثال: نزوى"></div>
+            <div class="field"><label>المحافظة *</label><select name="region" id="regGov" required></select></div>
+            <div class="field"><label>الولاية *</label><select name="wilayah" id="regWil" required></select></div>
+          </div>
+          <div class="field sugg-wrap"><label>اسم المدرسة *</label><input name="name" id="regName" required autocomplete="off" placeholder="مثال: مدرسة أبو عبيدة (10-12)">
+            <div class="sugg hidden" id="regSugg"></div>
+            <div class="notice warn hidden" id="regDup"></div>
           </div>
           <div class="field"><label>المراحل الدراسية</label><input name="stages" placeholder="مثال: من العاشر إلى الثاني عشر"></div>
           <div class="grid-2">
@@ -59,7 +62,16 @@
         <p class="sub">اختر مدرستك، وبعد موافقة إدارة المدرسة تستطيع الدخول ومشاهدة جدولك.</p>
         <form id="tForm" novalidate>
           <div class="field"><label>المدرسة *</label>
-            <select name="schoolId" id="schoolSel" required><option value="">جارٍ تحميل المدارس...</option></select>
+            <div class="grid-2 pick-filters">
+              <select id="tGov"></select>
+              <select id="tWil"></select>
+            </div>
+            <div class="sugg-wrap">
+              <input type="search" id="tSchoolQ" autocomplete="off" placeholder="ابحث باسم المدرسة">
+              <div class="sugg" id="tSugg"></div>
+            </div>
+            <div class="picked hidden" id="tPicked"></div>
+            <select name="schoolId" id="schoolSel" required class="hidden"><option value="">جارٍ تحميل المدارس...</option></select>
           </div>
           <div class="grid-2">
             <div class="field"><label>الاسم الكامل *</label><input name="name" required placeholder="كما هو في جدول المدرسة"></div>
@@ -91,7 +103,8 @@
 </div>
 
 <script type="module">
-  import { auth, db, applyBranding, errMsg, configured, defaultPeriods, t, waitUser } from "./assets/app.js?v=202611142201";
+  import { auth, db, applyBranding, errMsg, configured, defaultPeriods, t, waitUser, norm } from "./assets/app.js?v=202611142213";
+  import { govOptions, wilOptions, linkGovWil } from "./assets/oman.js?v=202611142213";
   import { createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { doc, setDoc, getDocs, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   applyBranding();
@@ -116,14 +129,41 @@
     $("doneCard").classList.remove("hidden");
   }
 
+  // ---------- المدارس المسجلة (للاقتراحات والبحث) ----------
+  let schoolsLoaded = false, schools = [], schoolsP = null;
+  function fetchSchools() {
+    return schoolsP ||= getDocs(collection(db, "publicSchools")).then(snap => {
+      schools = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(b.name, "ar"));
+      return schools;
+    }).catch(() => { schoolsP = null; throw new Error("load"); });
+  }
+  const place = s => [s.wilayah, s.region].filter(Boolean).join(" — ");
+  const anyWord = (q, s) => { const w = norm(q).split(" ").filter(Boolean); const h = norm(s.name + " " + (s.region || "") + " " + (s.wilayah || "")); return w.every(x => h.includes(x)); };
+
   // ---------- تسجيل مدرسة ----------
   const f = $("regForm"), err = $("err"), btn = $("submitBtn");
+  $("regGov").innerHTML = govOptions("", t("— اختر المحافظة —"));
+  $("regWil").innerHTML = wilOptions("", "", t("— اختر الولاية —"));
+  linkGovWil($("regGov"), $("regWil"), t("— اختر الولاية —"));
+  // اقتراحات بأسماء المدارس المسجلة، وتنبيه إذا كانت المدرسة مسجلة مسبقًا في نفس الولاية
+  const regCheck = () => {
+    const q = $("regName").value.trim(), box = $("regSugg"), dup = $("regDup");
+    const gov = $("regGov").value, wil = $("regWil").value;
+    const same = schools.find(s => norm(s.name) === norm(q) && (!wil || !s.wilayah || s.wilayah === wil) && (!gov || !s.region || s.region === gov));
+    dup.classList.toggle("hidden", !same || !q);
+    if (same) dup.textContent = t("«{0}» مسجلة مسبقًا في المنصة ({1}). إذا كانت مدرستك، تواصل مع مسؤول الجدول فيها أو مع إدارة المنصة بدل التسجيل من جديد.", same.name, place(same));
+    const hits = q.length < 2 ? [] : schools.filter(s => anyWord(q, s) && s !== same).slice(0, 6);
+    box.innerHTML = hits.length ? `<small class="muted">${t("مدارس مسجلة بأسماء مشابهة:")}</small>` + hits.map(s => `<div class="sugg-i"><b>${escapeHtml(s.name)}</b><small>${escapeHtml(place(s))}</small></div>`).join("") : "";
+    box.classList.toggle("hidden", !hits.length);
+  };
+  $("regName").addEventListener("focus", () => fetchSchools().then(regCheck).catch(() => {}), { once: true });
+  ["input", "change"].forEach(ev => { $("regName").addEventListener(ev, regCheck); $("regWil").addEventListener(ev, regCheck); });
   f.addEventListener("submit", async e => {
     e.preventDefault();
     err.textContent = "";
     const d = Object.fromEntries(new FormData(f).entries());
     for (const k in d) d[k] = d[k].trim();
-    if (!d.name || !d.region || !d.principal || !d.phone || !d.email || !d.password) return (err.textContent = t("يرجى تعبئة جميع الحقول المطلوبة (*)"));
+    if (!d.name || !d.region || !d.wilayah || !d.principal || !d.phone || !d.email || !d.password) return (err.textContent = t("يرجى تعبئة جميع الحقول المطلوبة (*)"));
     if (d.password.length < 6) return (err.textContent = t("كلمة المرور يجب أن تكون 6 أحرف على الأقل"));
     if (d.password !== d.password2) return (err.textContent = t("كلمتا المرور غير متطابقتين"));
     if (!configured) return (err.textContent = t("المنصة غير مربوطة بـ Firebase بعد"));
@@ -142,20 +182,39 @@
     } catch (ex) { err.textContent = errMsg(ex); btn.disabled = false; }
   });
 
-  // ---------- تسجيل معلم ----------
-  let schoolsLoaded = false, schools = [];
+  // ---------- تسجيل معلم: بحث عن المدرسة ----------
   async function loadSchools() {
     if (schoolsLoaded) return;
     const sel = $("schoolSel");
+    $("tGov").innerHTML = govOptions("", t("كل المحافظات"));
+    $("tWil").innerHTML = wilOptions("", "", t("كل الولايات"));
+    linkGovWil($("tGov"), $("tWil"), t("كل الولايات"));
     try {
-      const snap = await getDocs(collection(db, "publicSchools"));
-      schools = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(b.name, "ar"));
-      sel.innerHTML = `<option value="">${t("— اختر مدرستك —")}</option>` + schools.map(s =>
-        `<option value="${s.id}">${escapeHtml(s.name)}${s.region ? " — " + escapeHtml(s.region) : ""}</option>`).join("");
-      if (!schools.length) sel.innerHTML = `<option value="">${t("لا توجد مدارس مفعّلة بعد")}</option>`;
+      await fetchSchools();
+      sel.innerHTML = `<option value=""></option>` + schools.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
       schoolsLoaded = true;
-    } catch (ex) { sel.innerHTML = `<option value="">${t("تعذّر تحميل المدارس")}</option>`; }
+      drawPick();
+    } catch (ex) { $("tSugg").innerHTML = `<div class="muted sugg-e">${t("تعذّر تحميل المدارس")}</div>`; }
   }
+  function drawPick() {
+    const q = $("tSchoolQ").value.trim(), gov = $("tGov").value, wil = $("tWil").value, box = $("tSugg");
+    if (!schools.length) { box.innerHTML = `<div class="muted sugg-e">${t("لا توجد مدارس مفعّلة بعد")}</div>`; return; }
+    const list = schools.filter(s => (!gov || s.region === gov) && (!wil || s.wilayah === wil) && (!q || anyWord(q, s)));
+    box.innerHTML = list.length ? list.slice(0, 50).map(s => `<button type="button" class="sugg-i" data-id="${s.id}"><b>${escapeHtml(s.name)}</b><small>${escapeHtml(place(s))}</small></button>`).join("")
+      + (list.length > 50 ? `<div class="muted sugg-e">${t("اكتب أكثر لتضييق البحث")}</div>` : "")
+      : `<div class="muted sugg-e">${t("لا توجد نتائج. تأكد أن مدرستك مشتركة في المنصة.")}</div>`;
+  }
+  ["input", "search"].forEach(ev => $("tSchoolQ").addEventListener(ev, drawPick));
+  ["tGov", "tWil"].forEach(id => $(id).addEventListener("change", drawPick));
+  $("tSugg").addEventListener("click", e => {
+    const b = e.target.closest("[data-id]"); if (!b) return;
+    const s = schools.find(x => x.id === b.dataset.id);
+    $("schoolSel").value = s.id;
+    $("tPicked").innerHTML = `<div><small class="muted">${t("المدرسة المختارة")}</small><b>${escapeHtml(s.name)}</b><small>${escapeHtml(place(s))}</small></div><button type="button" class="btn sm ghost" id="tChange">${t("تغيير")}</button>`;
+    $("tPicked").classList.remove("hidden");
+    $("tSchoolQ").closest(".sugg-wrap").classList.add("hidden"); $("tGov").parentElement.classList.add("hidden");
+    $("tChange").onclick = () => { $("schoolSel").value = ""; $("tPicked").classList.add("hidden"); $("tSchoolQ").closest(".sugg-wrap").classList.remove("hidden"); $("tGov").parentElement.classList.remove("hidden"); };
+  });
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
   // وضع الانضمام: مستخدم مسجّل دخول وليس مرتبطًا بمدرسة

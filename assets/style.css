@@ -864,3 +864,18 @@ body.ro #view .tt-hint { display: none; }
 .bf-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .4rem 0; border-bottom: 1px dashed var(--line); font-size: .9rem; }
 .bf-row:last-child { border-bottom: 0; }
 .noti-old { margin-top: .6rem; }
+
+/* اقتراحات وبحث المدارس (التسجيل) */
+.sugg-wrap { position: relative; }
+.sugg { display: flex; flex-direction: column; gap: .2rem; margin-top: .4rem; max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; padding: .3rem; background: #fff; }
+.sugg.hidden { display: none; }
+.sugg > small { padding: .2rem .5rem; }
+.sugg-i { all: unset; box-sizing: border-box; display: flex; flex-direction: column; padding: .5rem .7rem; border-radius: 9px; cursor: default; text-align: start; }
+button.sugg-i { cursor: pointer; } button.sugg-i:hover, button.sugg-i:focus-visible { background: var(--primary-soft); }
+.sugg-i small { color: var(--muted); font-size: .8rem; }
+.sugg-e { padding: .6rem .7rem; font-size: .9rem; }
+#regDup { margin-top: .5rem; font-size: .88rem; }
+.pick-filters { margin-bottom: .5rem; gap: .5rem; }
+.picked { display: flex; align-items: center; justify-content: space-between; gap: .6rem; border: 1.5px solid var(--primary-2); background: var(--primary-soft); border-radius: 12px; padding: .6rem .8rem; }
+.picked > div { display: flex; flex-direction: column; } .picked small { font-size: .8rem; color: var(--muted); }
+select:disabled { opacity: .6; }

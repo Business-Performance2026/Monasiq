@@ -1,14 +1,15 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142201";
-import { setLang } from "./i18n.js?v=202611142201";
-import { schedule, reconcile } from "./scheduler.js?v=202611142201";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142201";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142201";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142201";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142201";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142201";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142201";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142201";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611142213";
+import { setLang } from "./i18n.js?v=202611142213";
+import { schedule, reconcile } from "./scheduler.js?v=202611142213";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611142213";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611142213";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611142213";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611142213";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611142213";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611142213";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611142213";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611142213";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -883,8 +884,8 @@ function vSettings() {
     <form id="infoForm">
       <div class="field"><label>اسم المدرسة</label><input name="name" value="${esc(s.name)}" required></div>
       <div class="grid-2">
-        <div class="field"><label>المحافظة / المنطقة</label><input name="region" value="${esc(s.region)}"></div>
-        <div class="field"><label>الولاية / المدينة</label><input name="wilayah" value="${esc(s.wilayah)}"></div>
+        <div class="field"><label>المحافظة</label><select name="region" id="stGov">${govOptions(s.region || "", tr("— اختر المحافظة —"))}</select></div>
+        <div class="field"><label>الولاية</label><select name="wilayah" id="stWil">${wilOptions(s.region || "", s.wilayah || "", tr("— اختر الولاية —"))}</select></div>
         <div class="field"><label>اسم المسؤول</label><input name="principal" value="${esc(s.principal)}"></div>
         <div class="field"><label>رقم الهاتف</label><input name="phone" dir="ltr" value="${esc(s.phone)}"></div>
       </div>
@@ -975,6 +976,7 @@ function foldCards(root, page, defaults = []) {
 }
 BIND.settings = v => {
   foldCards(v, "settings");
+  if ($("stGov")) linkGovWil($("stGov"), $("stWil"), tr("— اختر الولاية —"));
   const freeAll = (settings().freeAll || []).map(m => ({ ...m }));
   const drawFree = () => { $("freeBox").innerHTML = slotPicker("freeList", freeAll); bindSlots($("freeBox"), freeAll, drawFree); };
   drawFree();
