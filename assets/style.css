@@ -886,3 +886,16 @@ select:disabled { opacity: .6; }
 .imp-picked { margin-top: .5rem; display: flex; align-items: center; gap: .4rem; background: var(--primary-soft); border-radius: 10px; padding: .4rem .7rem; font-size: .9rem; }
 .imp-picked .btn { margin-inline-start: auto; }
 .noor-steps { padding-inline-start: 1.2rem; display: flex; flex-direction: column; gap: .4rem; }
+.half-tog { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; font-size: .85rem; font-weight: 600; color: var(--ink-2, #334); user-select: none; padding: .3rem .55rem; border: 1px solid var(--line, #dde3ec); border-radius: 999px; background: var(--card, #fff); }
+.half-tog input { position: absolute; opacity: 0; pointer-events: none; }
+.half-tog .sw { width: 34px; height: 20px; border-radius: 999px; background: #c9d1dc; position: relative; transition: background .2s; flex: none; }
+.half-tog .sw::after { content: ""; position: absolute; top: 2px; inset-inline-start: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: inset-inline-start .2s; }
+.half-tog input:checked + .sw { background: var(--brand, #012950); }
+.half-tog input:checked + .sw::after { inset-inline-start: 16px; }
+.half-tog input:focus-visible + .sw { outline: 2px solid var(--gold, #c9a227); outline-offset: 2px; }
+.bal-tbl { width: 100%; margin: .5rem 0; }
+.bal-tbl td:not(:first-child), .bal-tbl th:not(:first-child) { text-align: center; }
+@media (max-width: 700px) {
+  .page-title .row-actions .half-tog { order: 3; width: 100%; justify-content: center; }
+  .page-title .row-actions .btn.primary { order: 2; }
+}

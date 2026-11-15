@@ -7,7 +7,9 @@
 //
 // lessons: [{ t: teacherId, s: subjectId, c: sectionId, d: day|null, p: period|null, l: locked }]
 
-export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000, maxTries = 120, onProgress } = {}) {
+// halfBalance: توزيع منصف للفترات — حصص كل معلم في الأسبوع نصفها في الحصص الأولى ونصفها في الأخيرة (قيد مرن قوي)
+export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000, maxTries = 120, onProgress, halfBalance = false } = {}) {
+  const H = Math.ceil(P / 2); // الحصص الأولى: 0..H-1
   const N = D * P;
   const idx = (m, k) => { if (!m.has(k)) m.set(k, m.size); return m.get(k); };
   const tM = new Map(), cM = new Map(), kM = new Map();
@@ -108,7 +110,14 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
     const s = best.pos[i];
     return { ...x, d: s >= 0 ? Math.floor(s / P) : null, p: s >= 0 ? s % P : null, l: s >= 0 ? x.l : false };
   });
-  return { lessons: out, unplaced: best.unplaced, penalty: Math.round(best.pen), tries, ms: Math.round(now() - t0), lockedDropped, doubles: best.dbl };
+  // تقرير التوازن: المعلمون الذين لم يصلوا للنصف بالنصف
+  let balance = null;
+  if (halfBalance) {
+    const cnt = new Map();
+    out.forEach(x => { if (x.d == null) return; const c = cnt.get(x.t) || { early: 0, late: 0 }; x.p < H ? c.early++ : c.late++; cnt.set(x.t, c); });
+    balance = [...cnt].map(([t, c]) => ({ t, ...c })).filter(c => Math.abs(c.early - c.late) > 1);
+  }
+  return { lessons: out, unplaced: best.unplaced, penalty: Math.round(best.pen), tries, ms: Math.round(now() - t0), lockedDropped, doubles: best.dbl, balance, H };
 
   // ---------------------------------------------------------------
   function attempt() {
@@ -117,6 +126,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
     const kD = new Int32Array(nK * D);
     const tD = new Int32Array(nT * D);
     const tPC = new Int32Array(nT * P);      // عدد مرات كل حصة للمعلم
+    const tE = new Int32Array(nT), tAll = new Int32Array(nT); // حصص المعلم في الفترة الأولى / المجموع
     const dbl = new Int32Array(nT);          // عدد الحصص المزدوجة المتكوّنة
     const kAtCap = new Int32Array(nK);       // عدد الأيام التي وصلت فيها المادة للحد الأعلى
     const oCnt = new Int32Array(nC * D);     // حصص المعلم صاحب اليوم في يومه
@@ -139,6 +149,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
       if (++kD[l.ki * D + d] === cap[l.ki]) kAtCap[l.ki]++;
       { const od = l.ci * D + d; if (ownerT[od] >= 0) { if (ownerT[od] === l.ti) oCnt[od]++; else cNon[od]++; } }
       tD[l.ti * D + d]++; tPC[l.ti * P + s % P]++; pos[i] = s;
+      tAll[l.ti]++; if (s % P < H) tE[l.ti]++;
     };
     const unplace = i => {
       const s = pos[i]; if (s < 0) return;
@@ -147,6 +158,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
       if (kD[l.ki * D + d]-- === cap[l.ki]) kAtCap[l.ki]--;
       { const od = l.ci * D + d; if (ownerT[od] >= 0) { if (ownerT[od] === l.ti) oCnt[od]--; else cNon[od]--; } }
       tD[l.ti * D + d]--; tPC[l.ti * P + s % P]--; pos[i] = -1;
+      tAll[l.ti]--; if (s % P < H) tE[l.ti]--;
       if (mode[l.ti] === 1) dbl[l.ti] -= pairAt(l.ti, l.ki, s);
     };
 
@@ -210,6 +222,11 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
         const adj = (p > 0 && tB[ti * N + s - 1] >= 0) || (p < P - 1 && tB[ti * N + s + 1] >= 0);
         if (m === 3) c += adj ? 5 : -1;          // متباعدة
         else c += adj ? -0.8 : 0.4;
+      }
+      // التوزيع المنصف للفترات: لا تتجاوز الفترة الواحدة نصف حصص المعلم
+      if (halfBalance) {
+        const half = Math.ceil(tLoad[ti] / 2), n = p < H ? tE[ti] : tAll[ti] - tE[ti];
+        if (n + 1 > half) c += 8 * (n + 1 - half);
       }
       return c + Math.random() * 1.2;
     };
@@ -299,6 +316,50 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
       }
     }
 
+    // موازنة الفترات: تبديل حصتين لنفس الشعبة بين الفترة الأولى والأخيرة لتقليل عدم التوازن
+    if (halfBalance) {
+      const dev = t => Math.max(0, Math.abs(2 * tE[t] - tAll[t]) - (tAll[t] % 2));
+      const tryMove = (i, s2) => { // نقل i إلى خانة فارغة s2
+        const s1 = pos[i]; unplace(i);
+        if (cost(i, s2, false) < Infinity) { place(i, s2); return true; }
+        place(i, s1); return false;
+      };
+      const trySwap = (i, j) => {
+        const s1 = pos[i], s2 = pos[j]; unplace(i); unplace(j);
+        if (cost(i, s2, false) < Infinity) { place(i, s2); if (cost(j, s1, false) < Infinity) { place(j, s1); return true; } unplace(i); }
+        place(i, s1); place(j, s2); return false;
+      };
+      for (let round = 0; round < 4; round++) {
+        let improved = false;
+        for (let t = 0; t < nT; t++) {
+          let guard = 0;
+          while (dev(t) > 0 && guard++ < 20) {
+            const heavyEarly = 2 * tE[t] > tAll[t];
+            let done = false;
+            const mine = shuffle(Array.from({ length: nL }, (_, k) => k).filter(k => L[k].ti === t && pos[k] >= 0 && !isFixed[k] && (pos[k] % P < H) === heavyEarly));
+            for (const i of mine) {
+              const ci = L[i].ci, d0 = (pos[i] / P) | 0;
+              // الخانات في الفترة الأخرى، نفس اليوم أولًا
+              const cand = [];
+              for (let s2 = 0; s2 < N; s2++) if ((s2 % P < H) !== heavyEarly && tB[t * N + s2] < 0) cand.push(s2);
+              cand.sort((a, b) => ((a / P | 0) === d0 ? 0 : 1) - ((b / P | 0) === d0 ? 0 : 1) || Math.random() - .5);
+              for (const s2 of cand) {
+                const j = cB[ci * N + s2];
+                if (j < 0) { if (tryMove(i, s2)) { done = true; break; } continue; }
+                if (isFixed[j]) continue;
+                const u = L[j].ti, before = dev(t) + dev(u);
+                if (trySwap(i, j)) { if (dev(t) + dev(u) < before) { done = true; break; } trySwap(i, j); }
+              }
+              if (done) break;
+            }
+            if (!done) break;
+            improved = true;
+          }
+        }
+        if (!improved) break;
+      }
+    }
+
     let pen = unplaced * 1000;
     for (let k = 0; k < nK; k++) for (let d = 0; d < D; d++) {
       const v = kD[k * D + d];
@@ -309,6 +370,7 @@ export async function schedule({ D, P, lessons, rules = null, timeBudget = 4000,
     for (let t = 0; t < nT; t++) {
       for (let d = 0; d < D; d++) pen += Math.max(0, tD[t * D + d] - Math.ceil(tAvg[t])) * 3;
       if (mode[t] === 1) { pen += Math.max(0, dblTarget[t] - dbl[t]) * 15; totalDbl += Math.min(dbl[t], dblTarget[t]); }
+      if (halfBalance) pen += Math.max(0, Math.abs(2 * tE[t] - tAll[t]) - (tAll[t] % 2)) * 5;
     }
     return { pos: Array.from(pos), unplaced, pen, dbl: totalDbl };
   }

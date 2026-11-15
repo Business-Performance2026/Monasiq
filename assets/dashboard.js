@@ -1,17 +1,17 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611150751";
-import { setLang } from "./i18n.js?v=202611150751";
-import { schedule, reconcile } from "./scheduler.js?v=202611150751";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611150751";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611150751";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611150751";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611150751";
-import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611150751";
-import { parseAscXml } from "./xml-import.js?v=202611150751";
-import { gzipText, gunzipText, buildNoorXml } from "./noor-export.js?v=202611150751";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611150751";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611150751";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611150751";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611151354";
+import { setLang } from "./i18n.js?v=202611151354";
+import { schedule, reconcile } from "./scheduler.js?v=202611151354";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611151354";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611151354";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611151354";
+import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611151354";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611151354";
+import { parseAscXml } from "./xml-import.js?v=202611151354";
+import { gzipText, gunzipText, buildNoorXml } from "./noor-export.js?v=202611151354";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611151354";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611151354";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611151354";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where, getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -1006,6 +1006,7 @@ function cleanSettings() {
   if (st.periodMax) o.periodMax = st.periodMax;
   if (st.maxRun) o.maxRun = st.maxRun;
   if (st.subs) o.subs = st.subs;
+  if (st.halfBalance) o.halfBalance = true;
   return o;
 }
 // تحويل البطاقات التي تحمل data-fold إلى أقسام قابلة للطي (العنوان يفتح ويغلق، والحالة تُحفظ)
@@ -2090,6 +2091,7 @@ function vTimetable() {
     <div class="row-actions">
       <span id="ttSave" class="save-state ok">محفوظ</span>
       <button class="btn" id="ttPrint"><span data-ic="download" data-size="18"></span>تحميل PDF</button>
+      <label class="half-tog" title="${tr("حصص كل معلم في الأسبوع: نصفها في الحصص الأولى ونصفها في الحصص الأخيرة")}"><input type="checkbox" id="ttHalf" ${settings().halfBalance ? "checked" : ""}><span class="sw"></span><span>${tf("توزيع منصف (1–{0} / {1}–{2})", Math.ceil(ttDims().P / 2), Math.ceil(ttDims().P / 2) + 1, ttDims().P)}</span></label>
       <button class="btn primary" id="ttGen"><span data-ic="magic" data-size="18"></span>توزيع تلقائي</button>
     </div>
   </div>
@@ -2257,6 +2259,13 @@ BIND.timetable = v => {
   $("ttPrev").onclick = () => step(-1);
   $("ttNext").onclick = () => step(1);
   $("ttGen").onclick = ttGenerate;
+  $("ttHalf").onchange = async e => {
+    const on = e.target.checked;
+    try {
+      await updateDoc(doc(db, "schools", SID), { settings: { ...cleanSettings(), halfBalance: on }, updatedAt: serverTimestamp() });
+      toast(on ? tr("سيتم توزيع حصص كل معلم بالتساوي بين الحصص الأولى والأخيرة عند التوزيع التلقائي القادم") : tr("تم إيقاف التوزيع المنصف"), "success");
+    } catch (er) { e.target.checked = !on; toast(errMsg(er), "error"); }
+  };
   updatePubBar();
   $("ttPrint").onclick = ttPrintMenu;
 
@@ -2320,7 +2329,7 @@ async function ttGenerate() {
   $("modalBack").dataset.lock = "1";
   const input = TT.lessons.map(x => x.l ? x : { ...x, d: null, p: null });
   const r = await schedule({
-    D, P, lessons: input, rules, timeBudget: 6000, maxTries: 120,
+    D, P, lessons: input, rules, timeBudget: 6000, maxTries: 120, halfBalance: !!settings().halfBalance,
     onProgress: pr => {
       const b = $("genBar"); if (b) b.style.width = Math.min(100, Math.max(pr.tries / pr.maxTries, pr.elapsed / 6000) * 100) + "%";
       const tx = $("genTxt"); if (tx) tx.textContent = tf("محاولة {0} — غير موزّعة: {1}", pr.tries, pr.unplaced);
@@ -2334,7 +2343,17 @@ async function ttGenerate() {
   render();
   if (r.unplaced) toast(tf("تم التوزيع، وبقيت {0} حصة بدون مكان. راجعها في قائمة غير الموزّعة.", r.unplaced), "error");
   else toast(tf("تم توزيع {0} حصة بدون تعارض ✅", r.lessons.length), "success");
+  if (r.balance?.length) setTimeout(() => balanceReport(r.balance, r.H, P), 600);
   if (r.lockedDropped) setTimeout(() => toast(tf("{0} حصة مثبتة كانت في وقت اجتماع أو حصة فارغة فأُعيد توزيعها", r.lockedDropped)), 3500);
+}
+function balanceReport(list, H, P) {
+  list.sort((a, b) => Math.abs(b.early - b.late) - Math.abs(a.early - a.late));
+  openModal(`${modalHead(tr("التوزيع المنصف للفترات"))}
+    <p style="margin-top:0">${tf("تم التوزيع، لكن {0} معلم لم يصل للنصف بالنصف بسبب القيود (حصص فارغة، أيام مخصصة، تعارضات):", list.length)}</p>
+    <table class="tbl bal-tbl"><thead><tr><th>${tr("المعلم")}</th><th>${tf("الحصص 1–{0}", H)}</th><th>${tf("الحصص {0}–{1}", H + 1, P)}</th></tr></thead>
+    <tbody>${list.map(c => `<tr><td data-no-i18n>${esc(teacherOf(c.t)?.name || "")}</td><td>${c.early}</td><td>${c.late}</td></tr>`).join("")}</tbody></table>
+    <p class="muted" style="font-size:.85rem">${tr("يمكنك تعديل حصصهم يدويًا بالنقل أو التبديل، أو إعادة التوزيع التلقائي لمحاولة أخرى.")}</p>
+    <div class="modal-actions"><button class="btn primary" data-close>${tr("حسنًا")}</button></div>`);
 }
 function precheckModal(issues) {
   return new Promise(resolve => {
