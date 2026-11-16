@@ -217,6 +217,85 @@ function groupBy(a, f) { const m = new Map(); for (const x of a) { const k = f(x
 function nearest(arr, v) { let bi = 0; arr.forEach((x, i) => { if (Math.abs(x - v) < Math.abs(arr[bi] - v)) bi = i; }); return bi; }
 function pad(t) { const [h, m] = t.split(":"); return `${h.padStart(2, "0")}:${m}`; }
 
+
+// ---------- «الجدول العام للمعلمين» (aSc): صف لكل معلم، أعمدة = الأيام × الحصص، الخانة = رمز الشعبة ----------
+// يرجع null إن لم يكن الملف بهذا الشكل
+export function parseGeneralPages(pages) {
+  const owners = [], warnings = [];
+  let maxP = 0; const daysSeen = new Set();
+  for (const [pi, pg] of pages.entries()) {
+    const items = pg.items;
+    const days = items.map(it => ({ it, d: dayOf(it.s) })).filter(x => x.d >= 0);
+    if (days.length < 3) continue;
+    // سطر عناوين الأيام: أكبر مجموعة على نفس الارتفاع
+    const lines = groupBy(days, x => Math.round(x.it.cy / 6));
+    const head = [...lines.values()].sort((a, b) => b.length - a.length)[0];
+    if (head.length < 3) continue;
+    const hy = median(head.map(x => x.it.cy));
+    // سطر أرقام الحصص أسفل الأيام مباشرة
+    const nums = items.filter(it => /^\d{1,2}$/.test(it.s) && it.cy > hy && it.cy < hy + 60);
+    const numLines = [...groupBy(nums, it => Math.round(it.cy / 4)).values()].sort((a, b) => b.length - a.length);
+    const pl = numLines[0];
+    if (!pl || pl.length < head.length * 3) continue; // ليس جدولًا عامًّا
+    const py = median(pl.map(it => it.cy));
+    const hdays = head.map(x => ({ d: x.d, cx: x.it.cx })).sort((a, b) => b.cx - a.cx);
+    const cols = pl.map(it => ({ x: it.cx, p: +it.s - 1, d: hdays[nearest(hdays.map(h => h.cx), it.cx)].d })).filter(c => c.p >= 0);
+    if (cols.length < head.length * 3) continue;
+    const colX = cols.map(c => c.x);
+    const minX = Math.min(...colX), maxX = Math.max(...colX);
+    const step = median(cols.map(c => c.x).sort((a, b) => a - b).slice(1).map((x, i, arr) => x - [minX, ...arr][i])) || 20;
+    const nP = Math.max(...cols.map(c => c.p)) + 1;
+    // أسماء المعلمين: نص على يمين آخر عمود
+    const names = items.filter(it => it.cy > py + 2 && it.x0 > maxX + step * 0.5 && /[؀-ۿa-zA-Z]/.test(it.s));
+    const nameRows = [...groupBy(names, it => Math.round(it.cy / 3)).values()].map(g => ({ y: median(g.map(i => i.cy)), name: g.sort((a, b) => b.cx - a.cx).map(i => i.s).join(" ").trim() }))
+      .filter(r => r.name && !/الجدول|مجموع|aSc|تم إنشاء/i.test(r.name)).sort((a, b) => a.y - b.y);
+    if (nameRows.length < 2) continue;
+    const rowH = median(nameRows.slice(1).map((r, i) => r.y - nameRows[i].y)) || 12;
+    const rows = nameRows.map(r => ({ ...r, cells: new Map() }));
+    // رموز الشعب داخل الشبكة
+    for (const it of items) {
+      if (it.cy <= py + 2 || it.cx < minX - step || it.cx > maxX + step * 0.6) continue;
+      const codes = [...it.s.replace(/\s+/g, " ").matchAll(/(\d{1,2})\s*\/\s*(\d{1,2})/g)];
+      if (!codes.length) continue;
+      const ri = nearest(rows.map(r => r.y), it.cy);
+      if (Math.abs(rows[ri].y - it.cy) > rowH * 0.75) continue;
+      const w = (it.x1 - it.x0) || step;
+      codes.forEach((m, k) => {
+        // الأرقام تُكتب من اليسار لليمين: أول رمز في النص هو الأيسر
+        const x = codes.length === 1 ? it.cx : it.x0 + (k + 0.5) * (w / codes.length);
+        const ci = nearest(colX, x);
+        if (Math.abs(colX[ci] - x) > step * 0.8) return;
+        const c = cols[ci], key = c.d + "." + c.p;
+        if (!rows[ri].cells.has(key)) rows[ri].cells.set(key, { d: c.d, p: c.p, secs: [], texts: [] });
+        rows[ri].cells.get(key).secs.push(`${+m[1]}/${+m[2]}`);
+      });
+    }
+    // عمود المجموع (يسار الشبكة) للتحقق من القراءة
+    for (const it of items) {
+      if (!/^\d{1,2}$/.test(it.s) || it.cy <= py + 2 || it.cx > minX - step * 0.5) continue;
+      const ri = nearest(rows.map(r => r.y), it.cy);
+      if (Math.abs(rows[ri].y - it.cy) <= rowH * 0.6) rows[ri].total = +it.s;
+    }
+    for (const r of rows) {
+      const got = [...r.cells.values()].reduce((a, c) => a + c.secs.length, 0);
+      if (r.total && got < r.total) warnings.push(`${r.name}: قُرئت ${got} حصة من ${r.total} (حصص بدون رقم شعبة مثل المختبر لم تُستورد)`);
+    }
+    for (const r of rows) {
+      if (!r.cells.size) continue;
+      owners.push({ name: r.name, kind: "teacher", section: null, cells: [...r.cells.values()], nP, times: null, page: pi + 1 });
+    }
+    hdays.forEach(h => daysSeen.add(h.d));
+    maxP = Math.max(maxP, nP);
+  }
+  if (!owners.length) return null;
+  return { owners, warnings, days: [...daysSeen].sort((a, b) => a - b), maxP, general: true };
+}
+// تعيين مادة كل معلم (الجدول العام لا يذكر المادة)
+export function applyGeneralSubjects(parsed, subjOf) {
+  for (const o of parsed.owners) { const s = (subjOf(o.name) || "").trim() || "غير محددة"; o.cells.forEach(c => (c.texts = [s])); }
+  return parsed;
+}
+
 // ---------- تحويل إلى بيانات استيراد ----------
 const baseSubject = s => clean(s)
   .replace(/\s*(مختبر|قاعة|غرفة|معمل)\s+\S+.*$/, "")

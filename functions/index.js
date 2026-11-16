@@ -3,7 +3,7 @@
 // 2) إشعار للمدرسة عند أي إشعار جديد في حسابها (تفعيل، رفض، تذكير)
 // 3) تذكيرات يومية: قرب انتهاء الاشتراك أو التجربة، والطلبات المعلّقة للإدارة
 // 4) حذف ملف الوصل من التخزين عند حذف الطلب
-const { onDocumentCreated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentDeleted, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { setGlobalOptions, logger } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
@@ -57,7 +57,7 @@ exports.onSchoolCreated = onDocumentCreated("schools/{sid}", async e => {
 
 exports.onSchoolNotification = onDocumentCreated("schools/{sid}/notifications/{nid}", async e => {
   const n = e.data?.data(); if (!n) return;
-  await push(userTokens(e.params.sid), n.title || "مُنسِّق", n.body || "", "dashboard.html#billing");
+  await push(userTokens(e.params.sid), n.title || "مُنسِّق", n.body || "", "dashboard.html" + (n.link || "#billing"));
 });
 
 // تحديث جدول المعلمين: إشعار داخل المنصة + إشعار جوال لكل معلم تغيّر جدوله
@@ -139,4 +139,33 @@ exports.dailyReminders = onSchedule({ schedule: "0 9 * * *", timeZone: "Asia/Mus
   const pending = await db.collection("payments").where("status", "==", "pending").get();
   if (!pending.empty) await push(adminTokens(), "طلبات اشتراك بانتظارك", `لديك ${pending.size} طلب اشتراك بانتظار المراجعة.`, "admin.html#payments");
   logger.info("daily", { reminders: made, pending: pending.size });
+});
+
+// طلبات المعلمين (تبديل / احتياط): إشعار للزميل، ثم للمدرسة، ثم بالنتيجة لصاحب الطلب
+exports.onRequestWritten = onDocumentWritten("schools/{sid}/requests/{rid}", async e => {
+  const before = e.data?.before?.data(), r = e.data?.after?.data();
+  if (!r || before?.status === r.status) return;
+  const sid = e.params.sid, rid = e.params.rid;
+  const accs = await db.collection("teacherAccounts").where("schoolId", "==", sid).get();
+  const notifyTeacher = async (tid, title, body) => {
+    for (const a of accs.docs.filter(a => a.get("teacherId") === tid && a.get("status") === "active")) {
+      await a.ref.collection("notifications").doc(`rq_${rid}_${r.status}`).set({ title, body, kind: "req", at: Date.now(), read: false });
+      await push(userTokens(a.id), title, body, "teacher.html");
+    }
+  };
+  const notifySchool = (title, body) => db.collection("schools").doc(sid).collection("notifications").doc(`rq_${rid}_${r.status}`)
+    .set({ title, body, kind: "info", link: "#requests", at: Date.now(), read: false });
+  const txt = r.text || "";
+  const swap = r.kind === "swap";
+  if (r.status === "peer") await notifyTeacher(r.to, "طلب تبديل حصة 🔁", `${r.fromName || "زميلك"} يطلب التبديل معك: ${txt}`);
+  else if (r.status === "pending") await notifySchool(swap ? "طلب تبديل جديد 🔁" : "طلب احتياط جديد 📌", swap ? `${r.fromName || ""} ⇄ ${r.toName || ""}: ${txt}` : `${r.fromName || ""}: ${txt}${r.note ? " — " + r.note : ""}`);
+  else if (r.status === "declined") await notifyTeacher(r.from, "رفض زميلك طلب التبديل", `${r.toName || ""}: ${txt}`);
+  else if (r.status === "approved") {
+    await notifyTeacher(r.from, swap ? "تمت الموافقة على التبديل ✅" : "تمت الموافقة على طلب الاحتياط ✅", txt);
+    if (swap) await notifyTeacher(r.to, "تمت الموافقة على التبديل ✅", `${r.fromName || ""}: ${txt}`);
+  } else if (r.status === "rejected") {
+    await notifyTeacher(r.from, swap ? "رُفض طلب التبديل" : "رُفض طلب الاحتياط", `${txt}${r.reason ? " — " + r.reason : ""}`);
+    if (swap && before?.status === "pending") await notifyTeacher(r.to, "رُفض طلب التبديل", txt);
+  }
+  logger.info("request", { sid, rid, status: r.status });
 });

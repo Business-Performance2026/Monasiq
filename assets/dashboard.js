@@ -1,17 +1,18 @@
 // لوحة تحكم المدرسة
-import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611151503";
-import { setLang } from "./i18n.js?v=202611151503";
-import { schedule, reconcile } from "./scheduler.js?v=202611151503";
-import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611151503";
-import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611151503";
-import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611151503";
-import { readPdfPages, parseTimetablePages, buildImport } from "./pdf-import.js?v=202611151503";
-import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611151503";
-import { parseAscXml } from "./xml-import.js?v=202611151503";
-import { gzipText, gunzipText, buildNoorXml } from "./noor-export.js?v=202611151503";
-import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611151503";
-import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611151503";
-import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611151503";
+import { db, applyBranding, waitUser, getRole, logout, esc, toast, confirmBox, errMsg, DAYS_ALL, defaultPeriods, t as tf, tr, fillIcons, isEn, sendReset, T_STATUS, norm } from "./app.js?v=202611151929";
+import { setLang } from "./i18n.js?v=202611151929";
+import { schedule, reconcile } from "./scheduler.js?v=202611151929";
+import { sendTimetableLink, WA_ICON, newShareId, sheetToDoc, waNumber } from "./whatsapp.js?v=202611151929";
+import { buildRules, slotViolation, precheck, teacherDepts, sectionViolation, sectionDays } from "./rules.js?v=202611151929";
+import { buildSheet, downloadSheetsPDF, downloadHtmlPDF } from "./print.js?v=202611151929";
+import { readPdfPages, parseTimetablePages, buildImport, parseGeneralPages, applyGeneralSubjects } from "./pdf-import.js?v=202611151929";
+import { govOptions, wilOptions, linkGovWil } from "./oman.js?v=202611151929";
+import { generalModel, generalTable, downloadGeneralPDF, bindGeneral } from "./general.js?v=202611151929";
+import { parseAscXml } from "./xml-import.js?v=202611151929";
+import { gzipText, gunzipText, buildNoorXml } from "./noor-export.js?v=202611151929";
+import { parseExcel, downloadTemplate } from "./xlsx-import.js?v=202611151929";
+import { watchBilling, subState, quote, fmtDate, money, stateLabel, receiptDataUrl, uploadReceipt, DAY, BILLING_DEFAULT } from "./billing.js?v=202611151929";
+import { pushState, pushCardHTML, bindPushCard, refreshPush } from "./push.js?v=202611151929";
 import {
   collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, serverTimestamp, query, where, getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -102,6 +103,13 @@ function init(user) {
     document.querySelectorAll("[data-acc-badge]").forEach(b => { b.textContent = n; b.classList.toggle("hidden", !n); });
     if (loaded.size >= NEED && ["#accounts", "#overview", ""].includes(location.hash)) render();
   }, () => {});
+  // طلبات المعلمين (تبديل / احتياط)
+  onSnapshot(col("requests"), snap => {
+    REQ.list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at || 0) - (a.at || 0));
+    const n = REQ.list.filter(r => r.status === "pending").length;
+    document.querySelectorAll("[data-req-badge]").forEach(b => { b.textContent = n; b.classList.toggle("hidden", !n); });
+    if (loaded.size >= NEED && ["#requests", "#subs"].includes(location.hash)) render();
+  }, () => {});
   // الاحتياط: الغيابات والتوزيعات اليومية
   onSnapshot(col("absences"), snap => { SUB.abs = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (location.hash === "#subs" && loaded.size >= NEED) subsRedraw(); }, () => {});
   onSnapshot(col("subs"), snap => { SUB.days = new Map(snap.docs.map(d => [d.id, d.data()])); if (location.hash === "#subs" && loaded.size >= NEED && !SUB.saving) subsRedraw(); }, () => {});
@@ -133,12 +141,12 @@ function init(user) {
 }
 
 // ---------- التوجيه ----------
-const VIEWS = { subs: vSubs, billing: vBilling, departments: vDepartments, overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable, accounts: vAccounts };
+const VIEWS = { general: vGeneral, requests: vRequests, subs: vSubs, billing: vBilling, departments: vDepartments, overview: vOverview, settings: vSettings, grades: vGrades, subjects: vSubjects, teachers: vTeachers, timetable: vTimetable, accounts: vAccounts };
 function render() {
   if (loaded.size < NEED) return;
   const v = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
   document.querySelectorAll("#nav a, #bnav a, #sheet a").forEach(a => a.classList.toggle("active", a.dataset.v === v));
-  document.querySelector("[data-more]").classList.toggle("active", ["settings", "grades", "accounts", "departments", "billing", "subjects"].includes(v));
+  document.querySelector("[data-more]").classList.toggle("active", ["settings", "grades", "accounts", "departments", "billing", "subjects", "general", "requests"].includes(v));
   const view = $("view");
   view.onclick = null;
   document.body.classList.remove("has-sel");
@@ -196,7 +204,7 @@ function updateBell() {
 function openBell(showOld = false) {
   const al = subAlerts(), fresh = B.notes.filter(x => !x.read), old = B.notes.filter(x => x.read);
   const items = [...al.map(a => ({ ...a, alert: true })), ...fresh, ...(showOld ? old.slice(0, 30) : [])];
-  const card = x => `<a class="noti ${x.kind || "info"} ${x.read || x.alert ? "" : "new"}" href="#billing" data-close>
+  const card = x => `<a class="noti ${x.kind || "info"} ${x.read || x.alert ? "" : "new"}" href="${esc(x.link || "#billing")}" data-close>
       <b>${esc(x.title)}</b>${x.body ? `<span>${esc(x.body)}</span>` : ""}${x.at ? `<small>${esc(new Date(x.at).toLocaleString(isEn ? "en-GB" : "ar-OM", { dateStyle: "medium", timeStyle: "short" }))}</small>` : ""}</a>`;
   openModal(`${modalHead(tr("الإشعارات"))}
     <div class="noti-list">${items.length ? items.map(card).join("") : `<div class="empty">${tr("لا توجد إشعارات جديدة")}</div>`}</div>
@@ -505,6 +513,7 @@ function subsRedraw() {
       <button class="btn sm danger" data-del-abs="${a.id}">${tr("حذف")}</button></div>`).join("")}</div>`
       : `<p class="muted" style="margin:0">${d < 0 ? tr("ليس يوم دوام") : tr("لا يوجد غياب مسجّل في هذا اليوم")}</p>`}
   </div>
+  ${daySwaps(date).length ? `<div class="card"><h3>${tr("تبديلات معتمدة لهذا اليوم")}</h3><div class="rq-list">${daySwaps(date).map(r => reqCard(r)).join("")}</div></div>` : ""}
   ${items.length ? `<div class="card">
     <div class="card-head"><h3>${tr("حصص الاحتياط")}</h3><span class="muted">${esc(tf("{0} من {1} حصة لها بديل", filled, items.length))}</span></div>
     <div class="row-actions" style="margin-bottom:.8rem">
@@ -951,7 +960,10 @@ function vSettings() {
   </div>
   <div class="card" data-fold="import" data-sum="${esc(tr("Excel أو PDF أو XML"))}">
     <h3>استيراد البيانات</h3>
-    <p class="muted" style="margin-top:0">استورد المعلمين والصفوف والشعب والمواد دفعة واحدة من ملف Excel (سطر لكل معلم ومادة وشعبة)، أو من ملف PDF لجداول المعلمين، أو من ملف XML المُصدَّر من برنامج aSc (ينقل الجدول كاملًا كما هو).</p>
+    <p class="muted" style="margin-top:0">استورد المعلمين والصفوف والشعب والمواد دفعة واحدة من ملف Excel (سطر لكل معلم ومادة وشعبة)، أو من ملف PDF لجداول المعلمين أو «الجدول العام للمعلمين»، أو من ملف XML المُصدَّر من برنامج aSc (ينقل الجدول كاملًا كما هو).</p>
+    <ul class="imp-kinds"><li><b>XML</b> — ${tr("ملف نور/aSc: ينقل الجدول كاملًا ويسمح بتصدير ملف نور بعد التعديل.")}</li>
+      <li><b>PDF</b> — ${tr("جداول المعلمين الفردية، أو «الجدول العام للمعلمين» (صفحة واحدة لكل المعلمين) وتختار مادة كل معلم بعد القراءة.")}</li>
+      <li><b>Excel</b> — ${tr("سطر لكل معلم ومادة وشعبة (حمّل النموذج).")}</li></ul>
     <div class="field"><label>ملف Excel أو PDF أو XML</label><input type="file" id="impFile" accept=".xlsx,.xls,.csv,.pdf,.xml,text/xml,application/xml,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"><div class="imp-picked hidden" id="impPicked"></div></div>
     <p class="muted imp-hint">ملف Excel: الأعمدة هي المعلم، المادة، الشعبة (مثل 5/12)، عدد الحصص، ورقم الجوال والنصاب اختياريًا. <a href="#" id="xlsTpl">تحميل نموذج Excel</a></p>
     <label class="check" style="margin-bottom:1rem"><input type="checkbox" id="impReplace" checked> حذف البيانات الحالية قبل الاستيراد</label>
@@ -1088,10 +1100,17 @@ BIND.settings = v => {
       $("modalBack").dataset.lock = "1";
       try {
         const pages = await readPdfPages(f, r => { const b = $("pdfBar"); if (b) b.style.width = Math.round(r * 100) + "%"; });
-        const parsed = parseTimetablePages(pages);
+        let parsed = parseGeneralPages(pages), general = !!parsed;
+        if (general) {
+          // الجدول العام لا يذكر المادة: نطلب مادة كل معلم
+          delete $("modalBack").dataset.lock; closeModal();
+          const map = await generalSubjectsModal(parsed.owners.map(o => o.name));
+          if (!map) return;
+          applyGeneralSubjects(parsed, n => map.get(n));
+        } else parsed = parseTimetablePages(pages);
         const r = buildImport(parsed, settings());
         data = r.data; warnings = r.warnings;
-        extra = tf("تمت قراءة {0} جدول من {1} صفحة.", r.stats.grids, r.stats.pages);
+        extra = general ? tf("«الجدول العام للمعلمين»: {0} معلم، {1} حصة.", r.data.teachers.length, r.data.timetable.length) : tf("تمت قراءة {0} جدول من {1} صفحة.", r.stats.grids, r.stats.pages);
       } catch (ex) { console.error(ex); }
       delete $("modalBack").dataset.lock; closeModal();
       if (!data || !data.timetable?.length) return toast("لم يتم العثور على جداول يمكن قراءتها في هذا الملف. تأكد أن الملف PDF نصي (غير ممسوح ضوئيًا) ويحتوي جداول المعلمين.", "error");
@@ -1127,6 +1146,35 @@ BIND.settings = v => {
   };
 };
 
+// الجدول العام: اختيار مادة كل معلم (يُعبّأ تلقائيًا لمن هو موجود مسبقًا بنفس الاسم)
+function generalSubjectsModal(names) {
+  return new Promise(resolve => {
+    const known = new Map(S.teachers.map(t => [norm(t.name).replace(/\s+/g, ""), subject(t.subjectId)?.name || ""]));
+    const pre = n => known.get(norm(n).replace(/\s+/g, "")) || "";
+    const COMMON = ["التربية الإسلامية", "اللغة العربية", "اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء", "العلوم", "الدراسات الاجتماعية", "هذا وطني", "تقنية المعلومات", "الرياضة المدرسية", "الفنون التشكيلية", "المهارات الموسيقية", "المهارات الحياتية"];
+    const opts = [...new Set([...S.subjects.map(x => x.name), ...COMMON])];
+    const filled = names.filter(pre).length;
+    openModal(`${modalHead(tr("مادة كل معلم"))}
+      <p class="muted" style="margin-top:0">${esc(tf("وجدنا «الجدول العام للمعلمين» فيه {0} معلم. هذا الجدول لا يذكر المواد، فاكتب أو اختر مادة كل معلم.", names.length))}${filled ? " " + esc(tf("عبّأنا {0} معلم تلقائيًا من بياناتك الحالية.", filled)) : ""}</p>
+      <datalist id="gsList">${opts.map(o => `<option value="${esc(o)}">`).join("")}</datalist>
+      <div class="gs-list">${names.map((n, i) => `<div class="gs-row"><b data-no-i18n>${esc(n)}</b><input list="gsList" data-gs="${i}" value="${esc(pre(n))}" placeholder="${tr("المادة")}"></div>`).join("")}</div>
+      <p class="muted" style="font-size:.82rem">${tr("نصيحة: اضغط Enter بعد كتابة المادة للانتقال للمعلم التالي ونسخ نفس المادة له.")}</p>
+      <div class="modal-actions"><button class="btn primary" id="gsGo">${tr("متابعة")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+    $("modal").querySelectorAll("[data-gs]").forEach(inp => inp.addEventListener("keydown", e => {
+      if (e.key === "ArrowDown" && !inp.list?.options?.length) return;
+      if (e.key === "Enter") { e.preventDefault(); const nx = $("modal").querySelector(`[data-gs="${+inp.dataset.gs + 1}"]`); if (nx) { if (!nx.value) nx.value = inp.value; nx.focus(); nx.select(); } }
+    }));
+    let done = false;
+    const finish = v => { if (done) return; done = true; resolve(v); };
+    $("gsGo").onclick = () => {
+      const m = new Map(names.map((n, i) => [n, $("modal").querySelector(`[data-gs="${i}"]`).value.trim()]));
+      const empty = [...m.values()].filter(v => !v).length;
+      if (empty && !confirm(tf("{0} معلم بدون مادة — سيُستورد بمادة «غير محددة». متابعة؟", empty))) return;
+      closeModal(); finish(m);
+    };
+    $("modal").querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => finish(null)));
+  });
+}
 // ---------- الاستيراد والتصدير ----------
 function importPreview(data, warnings, extra, replace) {
   return new Promise(resolve => {
@@ -2404,6 +2452,140 @@ function ttClearModal() {
     toast(tf("تم مسح {0} حصة من الجدول", n), "success");
   };
 }
+
+// =====================================================
+//  الجدول العام للمعلمين
+// =====================================================
+function genModel() {
+  ttSync();
+  const st = settings();
+  return generalModel({ lessons: TT.lessons, teachers: S.teachers, subjects: S.subjects, days: st.days, P: st.periods.length });
+}
+const genOpts = () => ({ days: settings().days, P: settings().periods.length, secLabel: id => secLabel(section(id)), subjName: id => subject(id)?.name || "", school: S.school?.name || "",
+  stamp: new Date().toLocaleDateString(isEn ? "en-GB" : "ar-OM", { dateStyle: "long" }) });
+function vGeneral() {
+  const m = genModel();
+  return `<div class="page-title"><h1>${tr("الجدول العام للمعلمين")}</h1>
+    <div class="row-actions"><button class="btn primary" id="genPdf" ${m.count ? "" : "disabled"}><span data-ic="download" data-size="18"></span>${tr("تحميل PDF (A3)")}</button></div></div>
+    <div class="notice info">${tr("جدول واحد لكل المعلمين للتعليق في المدرسة: الخانة فيها رمز الشعبة، والخانة الفارغة تعني أن المعلم فارغ.")} ${tr("يظهر للمعلمين في حساباتهم بآخر نسخة أرسلتها بزر «إرسال التحديث للمعلمين».")}</div>
+    ${m.count ? `<div class="card">
+      <div class="gen-tools"><input type="search" data-gsearch placeholder="${tr("ابحث باسم المعلم أو المادة أو الشعبة…")}"><span class="gen-free hidden" data-gfree></span></div>
+      <div class="gen-wrap">${generalTable(m, genOpts())}</div>
+      <p class="gen-hint">${tr("اضغط على رقم أي حصة لإظهار المعلمين الفارغين فيها، واضغط على اسم معلم لتمييز صفه.")} · ${tf("{0} معلم · {1} حصة", m.count, m.lessons)}</p>
+    </div>` : `<div class="card"><div class="empty">${tr("لا يوجد جدول موزّع بعد.")} <a href="#timetable">${tr("اذهب لتوزيع الجدول")}</a></div></div>`}`;
+}
+BIND.general = view => {
+  bindGeneral(view);
+  $("genPdf") && ($("genPdf").onclick = async () => {
+    const b = $("genPdf"); b.disabled = true; toast(tr("جارٍ تجهيز الملف"));
+    try { await downloadGeneralPDF(genModel(), genOpts(), `${tr("الجدول العام للمعلمين")} - ${S.school?.name || ""}`); }
+    catch (e) { console.error(e); toast(tr("تعذّر إنشاء ملف PDF، حاول مرة أخرى."), "error"); }
+    b.disabled = false;
+  });
+};
+
+// =====================================================
+//  طلبات المعلمين: تبديل حصة / احتياط
+// =====================================================
+const REQ = { list: [], showOld: false };
+const REQ_ST = { peer: ["بانتظار موافقة الزميل", "info"], pending: ["بانتظار موافقة المدرسة", "warn"], approved: ["تمت الموافقة", "ok"], rejected: ["مرفوض", "bad"], declined: ["رفضه الزميل", "bad"], cancelled: ["ألغاه المعلم", "muted"] };
+const slotTxt = x => x ? `${settings().days[x.d] || ""} · ${tf("ح{0}", x.p + 1)} · ${secLabel(section(x.c))} ${subject(x.s)?.name || ""}` : "";
+function reqCard(r, actions) {
+  const st = REQ_ST[r.status] || [r.status, "muted"];
+  const who = teacherOf(r.from)?.name || r.fromName || "؟", peer = r.to ? (teacherOf(r.to)?.name || r.toName || "؟") : "";
+  const body = r.kind === "swap"
+    ? `<div class="rq-swap"><div><small>${esc(who)}</small><b>${esc(slotTxt(r.a))}</b></div><span class="rq-arrow">⇄</span><div><small>${esc(peer)}</small><b>${esc(slotTxt(r.b))}</b></div></div>
+       <small class="muted">${r.mode === "perm" ? tr("تبديل دائم (يتغير الجدول الأساسي)") : tf("تبديل ليوم {0} فقط", r.date || "")}</small>`
+    : `<div><b>${esc(tf("احتياط يوم {0}", r.date || ""))}</b> — ${esc((r.periods || []).map(p => tf("ح{0}", p + 1)).join("، "))}</div>`;
+  return `<div class="rq-card" data-rq="${r.id}">
+    <div class="rq-h"><b data-no-i18n>${esc(who)}</b><span class="badge ${st[1]}">${tr(st[0])}</span><span class="rq-kind">${r.kind === "swap" ? tr("طلب تبديل") : tr("طلب احتياط")}</span></div>
+    ${body}${r.note ? `<p class="rq-note">“${esc(r.note)}”</p>` : ""}${r.reason && r.status === "rejected" ? `<p class="rq-note bad">${esc(tf("سبب الرفض: {0}", r.reason))}</p>` : ""}
+    <small class="muted">${esc(new Date(r.at || 0).toLocaleString(isEn ? "en-GB" : "ar-OM", { dateStyle: "medium", timeStyle: "short" }))}</small>
+    ${actions ? `<div class="rq-act"><button class="btn sm primary" data-rq-ok="${r.id}">${tr("موافقة")}</button><button class="btn sm danger" data-rq-no="${r.id}">${tr("رفض")}</button></div>` : ""}
+  </div>`;
+}
+function vRequests() {
+  const pend = REQ.list.filter(r => r.status === "pending"), peer = REQ.list.filter(r => r.status === "peer");
+  const old = REQ.list.filter(r => !["pending", "peer"].includes(r.status));
+  return `<div class="page-title"><h1>${tr("طلبات المعلمين")}</h1></div>
+    <div class="notice info">${tr("يرسل المعلمون من حساباتهم طلبات تبديل حصة مع زميل (بعد موافقة الزميل) أو طلب احتياط، وتصل هنا للموافقة أو الرفض.")}</div>
+    <div class="card"><div class="card-head"><h3>${tr("بانتظار موافقتك")}</h3><span class="badge warn">${pend.length}</span></div>
+      ${pend.length ? `<div class="rq-list">${pend.map(r => reqCard(r, true)).join("")}</div>` : `<div class="empty">${tr("لا توجد طلبات جديدة")}</div>`}</div>
+    ${peer.length ? `<div class="card"><h3>${tr("بانتظار موافقة الزميل")}</h3><div class="rq-list">${peer.map(r => reqCard(r)).join("")}</div></div>` : ""}
+    ${old.length ? `<div class="card"><h3>${tr("السجل")}</h3><div class="rq-list">${old.slice(0, REQ.showOld ? 200 : 10).map(r => reqCard(r)).join("")}</div>
+      ${!REQ.showOld && old.length > 10 ? `<button class="btn ghost block" id="rqMore">${tf("عرض الكل ({0})", old.length)}</button>` : ""}</div>` : ""}`;
+}
+BIND.requests = view => {
+  $("rqMore") && ($("rqMore").onclick = () => { REQ.showOld = true; render(); });
+  view.onclick = e => {
+    const ok = e.target.closest("[data-rq-ok]"), no = e.target.closest("[data-rq-no]");
+    if (ok) approveReq(REQ.list.find(r => r.id === ok.dataset.rqOk));
+    if (no) rejectReq(REQ.list.find(r => r.id === no.dataset.rqNo));
+  };
+};
+const reqRef = id => dref("requests", id);
+async function decide(r, patch) { await updateDoc(reqRef(r.id), { ...patch, decidedAt: Date.now() }); }
+function rejectReq(r) {
+  if (!r) return;
+  openModal(`${modalHead(tr("رفض الطلب"))}<div class="field"><label>${tr("سبب الرفض (اختياري، يصل للمعلم)")}</label><input id="rqWhy" maxlength="140"></div>
+    <div class="modal-actions"><button class="btn danger" id="rqNoGo">${tr("رفض")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+  $("rqNoGo").onclick = async () => {
+    try { await decide(r, { status: "rejected", reason: $("rqWhy").value.trim() }); closeModal(); toast(tr("تم رفض الطلب"), "success"); }
+    catch (e) { toast(errMsg(e), "error"); }
+  };
+}
+// يتحقق أن الحصتين ما زالتا في مكانهما وأن التبديل لا يسبب تعارضًا
+function swapCheck(r) {
+  ttSync();
+  const { P } = ttDims(), L = TT.lessons;
+  const find = (t, x) => L.findIndex(l => l.t === t && l.d === x.d && l.p === x.p && l.c === x.c);
+  const ia = find(r.from, r.a), ib = find(r.to, r.b);
+  if (ia < 0 || ib < 0) return { err: tr("تغيّر الجدول منذ إرسال الطلب: إحدى الحصتين لم تعد في مكانها.") };
+  if (r.mode !== "perm") return { ia, ib };
+  const busy = (t, x, skip) => L.some((l, i) => i !== skip && l.t === t && l.d === x.d && l.p === x.p);
+  if (busy(r.from, r.b, ib)) return { err: tf("{0} لديه حصة أخرى في وقت حصة الزميل.", teacherOf(r.from)?.name || "") };
+  if (busy(r.to, r.a, ia)) return { err: tf("{0} لديه حصة أخرى في وقت الحصة المطلوبة.", teacherOf(r.to)?.name || "") };
+  const R = buildRules({ settings: settings(), departments: S.departments, teachers: S.teachers, sections: S.sections });
+  const slots = (t, skip) => new Set(L.filter((l, i) => i !== skip && l.t === t && l.d != null).map(l => l.d * P + l.p));
+  const v1 = slotViolation(R, r.from, r.b.d, r.b.p, slots(r.from, ia), tf), v2 = slotViolation(R, r.to, r.a.d, r.a.p, slots(r.to, ib), tf);
+  return { ia, ib, warn: [v1 && `${teacherOf(r.from)?.name}: ${v1}`, v2 && `${teacherOf(r.to)?.name}: ${v2}`].filter(Boolean) };
+}
+function approveReq(r) {
+  if (!r) return;
+  if (r.kind === "sub") {
+    return confirmBox(tf("سيُسجَّل غياب {0} يوم {1} في الحصص المطلوبة، ثم تختار البديل من صفحة الاحتياط.", teacherOf(r.from)?.name || "", r.date), tr("موافقة"), false).then(async ok => {
+      if (!ok) return;
+      try {
+        await addDoc(col("absences"), { teacherId: r.from, from: r.date, to: r.date, periods: r.periods?.length ? r.periods : null, reason: "other", note: r.note || "", reqId: r.id, at: Date.now() });
+        await decide(r, { status: "approved" });
+        toast(tr("تمت الموافقة — اختر البديل الآن"), "success");
+        SUB.date = r.date; location.hash = "#subs";
+      } catch (e) { toast(errMsg(e), "error"); }
+    });
+  }
+  const c = swapCheck(r);
+  if (c.err) return openModal(`${modalHead(tr("لا يمكن تنفيذ التبديل"))}<div class="notice bad">${esc(c.err)}</div>
+    <div class="modal-actions"><button class="btn danger" id="rqAutoNo">${tr("رفض الطلب")}</button><button class="btn ghost" data-close>${tr("إغلاق")}</button></div>`), ($("rqAutoNo").onclick = async () => { await decide(r, { status: "rejected", reason: c.err }).catch(() => {}); closeModal(); });
+  openModal(`${modalHead(tr("الموافقة على التبديل"))}
+    ${reqCard(r)}
+    ${c.warn?.length ? `<div class="notice warn">${c.warn.map(esc).join("<br>")}</div>` : ""}
+    <p class="muted">${r.mode === "perm" ? tr("سيتغيّر الجدول الأساسي للمعلمين الاثنين، ثم أرسل التحديث للمعلمين.") : tr("الجدول الأساسي لا يتغيّر؛ التبديل يظهر للمعلمين في ذلك اليوم فقط.")}</p>
+    <div class="modal-actions"><button class="btn primary" id="rqGo">${tr("موافقة")}</button><button class="btn ghost" data-close>${tr("إلغاء")}</button></div>`);
+  $("rqGo").onclick = async () => {
+    try {
+      if (r.mode === "perm") {
+        const A = TT.lessons[c.ia], Bl = TT.lessons[c.ib];
+        TT.lessons[c.ia] = { ...A, d: r.b.d, p: r.b.p }; TT.lessons[c.ib] = { ...Bl, d: r.a.d, p: r.a.p };
+        ttMark();
+      }
+      await decide(r, { status: "approved" });
+      closeModal(); toast(tr("تمت الموافقة على التبديل"), "success");
+    } catch (e) { toast(errMsg(e), "error"); }
+  };
+}
+// تبديلات اليوم المعتمدة (تظهر في صفحة الاحتياط)
+const daySwaps = date => REQ.list.filter(r => r.kind === "swap" && r.status === "approved" && r.mode !== "perm" && r.date === date);
+
 function balanceReport(list, H, P) {
   list.sort((a, b) => Math.abs(b.early - b.late) - Math.abs(a.early - a.late));
   openModal(`${modalHead(tr("التوزيع المنصف للفترات"))}

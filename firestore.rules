@@ -71,6 +71,25 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['shareId']);
       }
       // إشعارات المدرسة: الإدارة تنشئها، والمدرسة تقرؤها وتعلّمها كمقروءة
+      // طلبات المعلمين: تبديل حصة / احتياط
+      match /requests/{rid} {
+        function myTid() { return get(/databases/$(database)/documents/teacherAccounts/$(request.auth.uid)).data.teacherId; }
+        allow create: if isActiveTeacherOf(schoolId)
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.from == myTid()
+          && request.resource.data.kind in ['swap', 'sub']
+          && request.resource.data.status == (request.resource.data.kind == 'swap' ? 'peer' : 'pending')
+          && request.resource.data.parties[0] == myTid()
+          && !request.resource.data.keys().hasAny(['decidedAt', 'reason', 'peerAt']);
+        // الزميل: يوافق أو يرفض
+        allow update: if isActiveTeacherOf(schoolId) && resource.data.status == 'peer' && resource.data.to == myTid()
+          && request.resource.data.status in ['pending', 'declined']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'peerAt', 'decidedAt']);
+        // صاحب الطلب: يلغيه قبل القرار
+        allow update: if isActiveTeacherOf(schoolId) && resource.data.fromUid == request.auth.uid
+          && resource.data.status in ['peer', 'pending'] && request.resource.data.status == 'cancelled'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decidedAt']);
+      }
       match /notifications/{nid} {
         allow read: if isAdmin() || isActiveSchool(schoolId);
         allow create, delete: if isAdmin();
